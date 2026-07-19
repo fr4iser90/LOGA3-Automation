@@ -290,7 +290,6 @@ settingsForm.addEventListener('submit', async (event) => {
     configured = Boolean(result.configured);
     updateSetupUi();
     settingsModal.hidden = true;
-    appendLog(`✅ Zugang gespeichert (${result.username}).`);
   } catch (error) {
     settingsError.textContent = error.message;
     settingsError.hidden = false;

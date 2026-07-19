@@ -277,6 +277,10 @@ button.danger {
   color: var(--text);
 }
 
+.setup-banner[hidden] {
+  display: none;
+}
+
 .modal {
   position: fixed;
   inset: 0;

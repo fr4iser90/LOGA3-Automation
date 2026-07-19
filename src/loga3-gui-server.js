@@ -5,6 +5,13 @@ const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 const { URL } = require('url');
+
+require('dotenv').config({
+    path: process.env.LOGA3_PORTABLE_ROOT
+        ? path.join(process.env.LOGA3_PORTABLE_ROOT, '.env')
+        : path.join(__dirname, '..', '.env'),
+});
+
 const { scanYear, getAvailableYears, getDownloadsDir } = require('./loga3-inventory');
 const {
     getPublicSettings,
