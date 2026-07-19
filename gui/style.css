@@ -105,7 +105,7 @@ button.danger {
 
 .summary {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 12px;
   margin-bottom: 20px;
 }
@@ -168,8 +168,13 @@ button.danger {
   border-color: rgba(240, 113, 120, 0.35);
 }
 
+.month-card.noplan {
+  border-color: rgba(230, 180, 80, 0.45);
+}
+
 .month-card.selected.present,
-.month-card.selected.missing {
+.month-card.selected.missing,
+.month-card.selected.noplan {
   border-color: var(--accent);
 }
 
@@ -198,6 +203,11 @@ button.danger {
 .badge.no {
   background: rgba(240, 113, 120, 0.15);
   color: var(--missing);
+}
+
+.badge.warn {
+  background: rgba(230, 180, 80, 0.18);
+  color: #e6b450;
 }
 
 .file-name {

@@ -35,6 +35,15 @@ class Loga3Complete {
         this.exitAfter = options.exitAfter || false;
         this.targets = options.targets || [];
         this.savedFiles = [];
+        this.shuttingDown = false;
+    }
+
+    isAbortError(error) {
+        if (this.shuttingDown) return true;
+        const msg = String(error?.message || error || '');
+        return /Target page, context or browser has been closed/i.test(msg)
+            || /browser has been closed/i.test(msg)
+            || error?.name === 'TargetClosedError';
     }
 
     async run() {
@@ -42,7 +51,7 @@ class Loga3Complete {
             userT('autoStart');
 
             if (this.targets.length) {
-                debugLog(`Scheduled: ${this.targets.map((t) => `${String(t.month).padStart(2, '0')}/${t.year}`).join(' → ')}`);
+                debugLog(`Scheduled: ${this.targets.map((row) => `${String(row.month).padStart(2, '0')}/${row.year}`).join(' → ')}`);
             } else if (process.env.LOGA3_REQUIRE_TARGETS === '1') {
                 throw new Error('Month list missing — please restart GUI and try again');
             }
@@ -90,6 +99,7 @@ class Loga3Complete {
                 : [{ month: null, year: null }];
 
             for (let index = 0; index < jobs.length; index++) {
+                if (this.shuttingDown) break;
                 const job = jobs[index];
                 const label = job.month && job.year
                     ? `${monthLabel(job.month)} ${job.year}`
@@ -97,14 +107,29 @@ class Loga3Complete {
 
                 userT('autoMonth', { index: index + 1, total: jobs.length, label });
 
-                const filename = await this.workflowAutomation.runDownloadPipeline(job.month, job.year);
-                userT('autoSaved', { filename });
-                if (this.workflowAutomation.lastSavedDownloadPath) {
-                    this.savedFiles.push(this.workflowAutomation.lastSavedDownloadPath);
-                } else if (filename) {
-                    this.savedFiles.push(path.join(this.workflowAutomation.downloadsDir, filename));
+                try {
+                    const filename = await this.workflowAutomation.runDownloadPipeline(job.month, job.year);
+                    userT('autoSaved', { filename });
+                    if (this.workflowAutomation.lastSavedDownloadPath) {
+                        this.savedFiles.push(this.workflowAutomation.lastSavedDownloadPath);
+                    } else if (filename) {
+                        this.savedFiles.push(path.join(this.workflowAutomation.downloadsDir, filename));
+                    }
+                    await this.workflowAutomation.takeScreenshot(`complete-download-${index + 1}.png`);
+                } catch (error) {
+                    if (error.code === 'NO_PLAN' || String(error.message || '').startsWith('NO_PLAN:')) {
+                        userT('autoNoPlan', { label });
+                        const month = job.month || error.targetMonth;
+                        const year = job.year || error.targetYear;
+                        await this.workflowAutomation.writeNoPlanMarker(month, year);
+                        continue;
+                    }
+                    throw error;
                 }
-                await this.workflowAutomation.takeScreenshot(`complete-download-${index + 1}.png`);
+            }
+
+            if (this.shuttingDown) {
+                return { ok: false, cancelled: true, savedFiles: this.savedFiles };
             }
 
             if (this.exitAfter) {
@@ -121,8 +146,12 @@ class Loga3Complete {
             return { ok: true, savedFiles: this.savedFiles };
 
         } catch (error) {
+            if (this.isAbortError(error)) {
+                try { await this.cleanup(); } catch { /* ignore */ }
+                process.exit(0);
+            }
             userErrorT('autoFailed', { message: error.message });
-            await this.loginAutomation.takeScreenshot('complete-error.png');
+            try { await this.loginAutomation.takeScreenshot('complete-error.png'); } catch { /* ignore */ }
             process.exit(1);
         }
     }
@@ -158,15 +187,24 @@ if (require.main === module) {
 
     const complete = new Loga3Complete({ exitAfter, targets });
 
-    process.on('SIGINT', async () => {
-        userT('autoShutdown');
-        await complete.cleanup();
+    const shutdownJob = async () => {
+        if (complete.shuttingDown) return;
+        complete.shuttingDown = true;
+        try {
+            await complete.cleanup();
+        } catch {
+            // ignore close races while cancelling
+        }
         process.exit(0);
-    });
+    };
+
+    process.on('SIGINT', shutdownJob);
+    process.on('SIGTERM', shutdownJob);
 
     complete.run()
         .then((result) => {
             if (!result || !exitAfter) return;
+            if (result.cancelled) return;
             const dir = result.downloadsDir || getDownloadsDir();
             userT('autoFinished', { dir });
             if (options.openFolder) openPath(dir);

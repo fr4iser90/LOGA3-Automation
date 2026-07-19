@@ -64,27 +64,35 @@ function scanYear(downloadsDir, year) {
     }
 
     const pdfFiles = files.filter((file) => file.toLowerCase().endsWith('.pdf'));
+    const noPlanMarkers = files.filter((file) => file.toLowerCase().endsWith('.noplan'));
 
     const labels = monthLabels();
     const months = MONTH_NAMES.map((monthName, index) => {
         const match = pdfFiles.find((file) => matchesMonthFile(file, monthName, year));
+        const noPlan = !match && noPlanMarkers.some((file) => {
+            const base = normalizeName(path.basename(file, path.extname(file)));
+            return base === `${normalizeName(monthName)}_${year}`;
+        });
         return {
             month: index + 1,
             label: labels[index],
             key: `${monthName}_${year}`,
             present: Boolean(match),
+            noPlan,
             file: match || null,
         };
     });
 
     const presentCount = months.filter((month) => month.present).length;
+    const noPlanCount = months.filter((month) => month.noPlan).length;
 
     return {
         year,
         downloadsDir,
         months,
         presentCount,
-        missingCount: 12 - presentCount,
+        noPlanCount,
+        missingCount: 12 - presentCount - noPlanCount,
     };
 }
 

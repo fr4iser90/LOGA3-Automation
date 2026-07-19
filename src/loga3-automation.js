@@ -278,7 +278,8 @@ class Loga3Automation {
     async cleanup() {
         if (this.browser) {
             await this.browser.close();
-            userT('autoBrowserClosed');
+            debugLog('Browser closed');
+            this.browser = null;
         }
     }
 

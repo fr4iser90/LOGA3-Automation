@@ -37,6 +37,7 @@ const MIME_TYPES = {
 
 let jobRunning = false;
 let jobChild = null;
+let jobCancelled = false;
 const sseClients = new Set();
 
 function sendJson(res, status, payload) {
@@ -142,6 +143,7 @@ function startDownload(request) {
     }
 
     jobRunning = true;
+    jobCancelled = false;
     broadcast('status', { running: true });
 
     const scriptPath = path.join(__dirname, 'loga3-complete.js');
@@ -177,28 +179,37 @@ function startDownload(request) {
     jobChild.stdout.on('data', handleOutput);
     jobChild.stderr.on('data', handleOutput);
 
-    jobChild.on('close', (code) => {
+    jobChild.on('close', (code, signal) => {
         jobRunning = false;
         jobChild = null;
+        const cancelled = jobCancelled
+            || signal === 'SIGTERM'
+            || signal === 'SIGINT'
+            || code === 130
+            || code === 143;
+        jobCancelled = false;
 
-        if (code === 0) {
+        if (cancelled) {
+            broadcast('done', { ok: false, cancelled: true, code, signal });
+        } else if (code === 0) {
             pushLog(t('logDone'));
             broadcast('done', { ok: true, code });
         } else {
-            pushLog(t('logError', { code }));
-            broadcast('done', { ok: false, code });
+            pushLog(t('logError', { code: code ?? signal ?? '?' }));
+            broadcast('done', { ok: false, code, signal });
         }
 
         broadcast('status', { running: false });
     });
 
-    return { ok: true, count: targets.length || 1, targets: targets.map((t) => `${String(t.month).padStart(2, '0')}/${t.year}`) };
+    return { ok: true, count: targets.length || 1, targets: targets.map((row) => `${String(row.month).padStart(2, '0')}/${row.year}`) };
 }
 
 function stopDownload() {
     if (!jobRunning || !jobChild) {
         return { ok: false, error: 'No job running.' };
     }
+    jobCancelled = true;
     jobChild.kill('SIGTERM');
     pushLog(t('logCancelled'));
     return { ok: true };

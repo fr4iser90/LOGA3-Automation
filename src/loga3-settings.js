@@ -81,6 +81,9 @@ function saveSettings(patch = {}) {
     }
 
     if (next.locale) setLocale(next.locale);
+    if (next.headless !== null) {
+        process.env.LOGA3_HEADLESS = next.headless ? '1' : '0';
+    }
 
     return {
         configured: true,
@@ -95,12 +98,18 @@ function getPublicSettings() {
     const settings = loadSettings();
     const envConfigured = Boolean(process.env.LOGA3_USERNAME && process.env.LOGA3_PASSWORD);
     const locale = getLocale();
+    let headless;
+    if (settings.headless !== null) {
+        headless = settings.headless;
+    } else if (process.env.LOGA3_HEADLESS !== undefined) {
+        headless = process.env.LOGA3_HEADLESS === '1' || process.env.LOGA3_HEADLESS === 'true';
+    } else {
+        headless = undefined;
+    }
     return {
         configured: isConfigured(settings),
         username: process.env.LOGA3_USERNAME || settings.username || '',
-        headless: process.env.LOGA3_HEADLESS !== undefined
-            ? (process.env.LOGA3_HEADLESS === '1' || process.env.LOGA3_HEADLESS === 'true')
-            : (settings.headless === null ? undefined : settings.headless),
+        headless,
         locale,
         source: envConfigured ? 'env' : (settings.username ? 'gui' : 'none'),
         settingsPath: getSettingsPath(),
@@ -116,7 +125,8 @@ function applySettingsToEnv(env = process.env) {
     if (!env.LOGA3_PASSWORD && settings.password) {
         env.LOGA3_PASSWORD = settings.password;
     }
-    if (env.LOGA3_HEADLESS === undefined && settings.headless !== null) {
+    // GUI checkbox is source of truth once set (overrides stale process env).
+    if (settings.headless !== null) {
         env.LOGA3_HEADLESS = settings.headless ? '1' : '0';
     }
     if (!env.LOGA3_LOCALE && settings.locale) {

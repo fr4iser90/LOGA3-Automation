@@ -498,6 +498,59 @@ class Loga3Workflow {
         );
     }
 
+    /**
+     * True when the visible month has real schedule content (shifts / times / SCHICHTFREI).
+     * Empty future months with only the hour axis / holidays are rejected.
+     */
+    async hasSchedulePlan() {
+        const sig = await this.getContentSignature();
+        const ranges = sig.ranges?.length || 0;
+        const punches = sig.geKo?.length || 0;
+        const free = sig.schichtfrei || 0;
+        const hasPlan = ranges > 0 || punches > 0 || free > 0;
+        debugLog(
+            `📋 Schedule check: ranges=${ranges} punches=${punches} schichtfrei=${free} → ${hasPlan ? 'plan' : 'empty'}`
+        );
+        return hasPlan;
+    }
+
+    async assertMonthHasPlan(targetMonth, targetYear) {
+        if (await this.hasSchedulePlan()) return true;
+        await this.takeScreenshot(`no-plan-${targetMonth}-${targetYear}.png`).catch(() => {});
+        const err = new Error(`NO_PLAN:${String(targetMonth).padStart(2, '0')}/${targetYear}`);
+        err.code = 'NO_PLAN';
+        err.targetMonth = targetMonth;
+        err.targetYear = targetYear;
+        throw err;
+    }
+
+    async writeNoPlanMarker(targetMonth, targetYear) {
+        if (!targetMonth || !targetYear) return;
+        const filename = periodToFilename(targetMonth, targetYear);
+        if (!filename) return;
+        if (!fs.existsSync(this.downloadsDir)) {
+            fs.mkdirSync(this.downloadsDir, { recursive: true });
+        }
+        const markerPath = path.join(this.downloadsDir, `${filename}.noplan`);
+        await fs.promises.writeFile(
+            markerPath,
+            `${JSON.stringify({
+                month: targetMonth,
+                year: targetYear,
+                reason: 'no-schedule',
+                checkedAt: new Date().toISOString(),
+            }, null, 2)}\n`,
+            'utf8'
+        );
+        debugLog(`📝 No-plan marker: ${markerPath}`);
+    }
+
+    async clearNoPlanMarker(filename) {
+        if (!filename) return;
+        const markerPath = path.join(this.downloadsDir, `${filename}.noplan`);
+        await fs.promises.unlink(markerPath).catch(() => {});
+    }
+
     async waitUntilCalendarShowsMonth(targetMonth, targetYear, timeoutMs = 45000) {
         const deadline = Date.now() + timeoutMs;
         let lastLog = 0;
@@ -1648,6 +1701,17 @@ class Loga3Workflow {
 
             // HARD GATE: never open Export / generate / download on stale content.
             await this.assertContentReadyBeforeExport(targetMonth, targetYear);
+            // Reject months with no shifts / times yet (empty future plans).
+            await this.assertMonthHasPlan(targetMonth, targetYear);
+        } else if (!(await this.hasSchedulePlan())) {
+            const picker = await this.getMonthPickerState();
+            const err = new Error(
+                `NO_PLAN:${picker?.month || '??'}/${picker?.year || '????'}`
+            );
+            err.code = 'NO_PLAN';
+            err.targetMonth = picker?.month ? Number(picker.month) : null;
+            err.targetYear = picker?.year ? Number(picker.year) : null;
+            throw err;
         }
 
         await this.clickSmartEdinGeborderIcon();
@@ -1723,6 +1787,8 @@ class Loga3Workflow {
                 );
             }
         }
+
+        await this.clearNoPlanMarker(filename);
 
         if (isDebug()) {
             await fs.promises.writeFile(`${savePath}.meta.json`, JSON.stringify({

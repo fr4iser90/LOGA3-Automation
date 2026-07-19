@@ -170,18 +170,22 @@ function renderInventory(data) {
   summaryEl.innerHTML = `
     <div class="stat"><strong>${data.presentCount}</strong><span>${t('presentCount')}</span></div>
     <div class="stat"><strong>${data.missingCount}</strong><span>${t('missingCount')}</span></div>
+    <div class="stat"><strong>${data.noPlanCount || 0}</strong><span>${t('noPlanCount')}</span></div>
     <div class="stat"><strong>12</strong><span>${t('monthsTotal')}</span></div>
   `;
 
   monthsGrid.innerHTML = data.months.map((month) => {
     const selected = selectedMonths.has(month.month);
+    const statusClass = month.present ? 'present' : (month.noPlan ? 'noplan' : 'missing');
+    const badgeClass = month.present ? 'ok' : (month.noPlan ? 'warn' : 'no');
+    const badgeText = month.present ? t('present') : (month.noPlan ? t('noPlanBadge') : t('missing'));
     return `
-      <article class="month-card ${month.present ? 'present' : 'missing'} ${selected ? 'selected' : ''}" data-month="${month.month}">
+      <article class="month-card ${statusClass} ${selected ? 'selected' : ''}" data-month="${month.month}">
         <label class="month-label">
           <input type="checkbox" ${selected ? 'checked' : ''} ${running ? 'disabled' : ''}>
           <span>${month.label}</span>
         </label>
-        <span class="badge ${month.present ? 'ok' : 'no'}">${month.present ? t('present') : t('missing')}</span>
+        <span class="badge ${badgeClass}">${badgeText}</span>
         ${month.file ? `<p class="file-name">${month.file}</p>` : ''}
       </article>
     `;
