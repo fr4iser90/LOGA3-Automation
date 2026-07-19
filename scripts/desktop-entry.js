@@ -76,7 +76,7 @@ function main() {
     const dotenvPath = path.join(data, '.env');
     const dotenvBeside = path.join(path.dirname(data), '.env');
     if (!fs.existsSync(dotenvPath) && !fs.existsSync(dotenvBeside) && !process.env.LOGA3_USERNAME) {
-        console.warn('No .env found. Copy .env.example → .env (next to the AppImage or inside the zip folder).');
+        console.log('ℹ️  Optional: .env next to the AppImage — or save login in the GUI (Einstellungen).');
     }
 
     console.log(`LOGA3 bundle: ${bundle}`);
@@ -102,4 +102,8 @@ function main() {
     });
 }
 
-main();
+if (require.main === module) {
+    main();
+}
+
+module.exports = { bundleRoot, dataRoot, main };

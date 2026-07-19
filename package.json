@@ -19,7 +19,8 @@
     "download:next6": "node src/loga3-complete.js --once --next 6",
     "debug:content": "node test/debug-content-update.js --last 3",
     "test:download": "node test/test-download-save.js",
-    "test": "npm run test:download",
+    "test:desktop-stage": "node scripts/build-desktop.js --stage-only",
+    "test": "npm run test:download && npm run test:desktop-stage",
     "package:linux": "node scripts/build-desktop.js --target linux",
     "package:win": "node scripts/build-desktop.js --target win32",
     "package:desktop": "node scripts/build-desktop.js"

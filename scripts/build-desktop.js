@@ -22,27 +22,24 @@ const APP_FILES = [
     'gui',
 ];
 
-const SRC_FILES = [
-    'loga3-gui-server.js',
-    'loga3-automation.js',
-    'loga3-workflow.js',
-    'loga3-complete.js',
-    'loga3-inventory.js',
-    'loga3-cli-args.js',
-    'loga3-period.js',
-    'loga3-settings.js',
-    'loga3-config.example.js',
-];
+/** All src/loga3-*.js modules are packaged (avoids forgetting new files like i18n/log). */
+function listSrcFiles() {
+    return fs.readdirSync(path.join(ROOT, 'src'))
+        .filter((name) => /^loga3-.*\.js$/.test(name))
+        .sort();
+}
 
 function parseArgs(argv) {
     let target = process.platform === 'win32' ? 'win32' : 'linux';
+    let stageOnly = false;
     for (let i = 0; i < argv.length; i++) {
         if (argv[i] === '--target' && argv[i + 1]) target = argv[++i];
+        if (argv[i] === '--stage-only') stageOnly = true;
     }
-    if (!['linux', 'win32'].includes(target)) {
+    if (!stageOnly && !['linux', 'win32'].includes(target)) {
         throw new Error(`Unsupported --target ${target} (use linux|win32)`);
     }
-    return { target };
+    return { target, stageOnly };
 }
 
 function rmrf(p) {
@@ -117,7 +114,8 @@ PDFs:
    - Windows: Ordner downloads/ neben Loga3.exe
    - AppImage: Ordner loga3-data/ neben der AppImage-Datei
 
-Kein .env nötig. Optional für Profis: .env neben der App.
+Kein .env nötig — Zugang in der GUI speichern (Einstellungen).
+Optional für Profis: .env neben der App (LOGA3_USERNAME / LOGA3_PASSWORD).
 `);
 }
 
@@ -158,6 +156,11 @@ async function fetchNode(target, cacheDir) {
 }
 
 function stageApp(appDir) {
+    const srcFiles = listSrcFiles();
+    if (!srcFiles.includes('loga3-gui-server.js')) {
+        throw new Error('src/loga3-gui-server.js missing — cannot build desktop package');
+    }
+
     rmrf(appDir);
     mkdirp(appDir);
     for (const rel of APP_FILES) {
@@ -165,7 +168,7 @@ function stageApp(appDir) {
         if (!fs.existsSync(src)) throw new Error(`Missing required file: ${rel}`);
         copyRecursive(src, path.join(appDir, rel));
     }
-    for (const rel of SRC_FILES) {
+    for (const rel of srcFiles) {
         const src = path.join(ROOT, 'src', rel);
         if (!fs.existsSync(src)) throw new Error(`Missing required file: src/${rel}`);
         // Flatten into app/ so portable layout stays simple (gui-server next to node_modules)
@@ -186,6 +189,70 @@ function stageApp(appDir) {
     };
     fs.writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
     run('npm', ['ci', '--omit=dev'], { cwd: appDir });
+    validateStagedApp(appDir, srcFiles);
+}
+
+/**
+ * Fail the package build if the flattened app/ tree is incomplete or unloadable.
+ * Catches missing modules (e.g. new require('./loga3-i18n')) before tagging a release.
+ */
+function validateStagedApp(appDir, srcFiles = listSrcFiles()) {
+    const required = [...srcFiles, 'desktop-entry.js', 'package.json', 'gui/index.html', 'gui/app.js'];
+    for (const rel of required) {
+        const full = path.join(appDir, rel);
+        if (!fs.existsSync(full)) {
+            throw new Error(`Desktop stage incomplete — missing ${rel}`);
+        }
+    }
+
+    const jsFiles = fs.readdirSync(appDir).filter((name) => name.endsWith('.js'));
+    for (const file of jsFiles) {
+        const text = fs.readFileSync(path.join(appDir, file), 'utf8');
+        for (const match of text.matchAll(/require\(\s*['"](\.\/[^'"]+)['"]\s*\)/g)) {
+            let rel = match[1];
+            if (rel.startsWith('./gui/') || rel.startsWith('./node_modules/')) continue;
+            if (!rel.endsWith('.js')) rel += '.js';
+            const target = path.normalize(path.join(appDir, rel));
+            if (!target.startsWith(appDir)) continue;
+            if (!fs.existsSync(target)) {
+                throw new Error(`Desktop stage broken: ${file} requires ${match[1]} (not packaged)`);
+            }
+        }
+    }
+
+    // Load core modules without starting the HTTP server / browser.
+    const smoke = [
+        "require('./loga3-i18n');",
+        "require('./loga3-log');",
+        "require('./loga3-settings');",
+        "require('./loga3-inventory');",
+        "require('./loga3-period');",
+        "require('./loga3-cli-args');",
+        "require('./loga3-complete');",
+        "require('./desktop-entry.js');",
+        "console.log('DESKTOP_STAGE_OK');",
+    ].join('');
+
+    const result = spawnSync(process.execPath, ['-e', smoke], {
+        cwd: appDir,
+        encoding: 'utf8',
+        env: { ...process.env },
+    });
+    if (result.status !== 0 || !String(result.stdout || '').includes('DESKTOP_STAGE_OK')) {
+        throw new Error(
+            `Desktop stage smoke load failed:\n${result.stderr || result.stdout || result.error}`
+        );
+    }
+    console.log(`✅ Desktop stage validated (${srcFiles.length} src modules)`);
+}
+
+async function runStageValidation() {
+    const appDir = path.join(DIST, 'stage-validate', 'app');
+    mkdirp(DIST);
+    console.log('Staging desktop app/ for validation (no AppImage / Playwright)...');
+    stageApp(appDir);
+    console.log(`Validated stage at ${appDir}`);
+    return appDir;
 }
 
 function installBrowsers(portableRoot, appDir) {
@@ -365,8 +432,12 @@ Terminal=true
 }
 
 async function main() {
-    const { target } = parseArgs(process.argv.slice(2));
+    const { target, stageOnly } = parseArgs(process.argv.slice(2));
     mkdirp(DIST);
+    if (stageOnly) {
+        await runStageValidation();
+        return;
+    }
     console.log(`Building desktop package for ${target} (Node ${NODE_VERSION})...`);
     if (target === 'win32') await buildWin32();
     else await buildLinux();
