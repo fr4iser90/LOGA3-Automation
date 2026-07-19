@@ -1,0 +1,9 @@
+node_modules/
+loga3-config.js
+loga3-settings.json
+data/
+.env
+downloads/*.pdf
+downloads/*.meta.json
+logs/
+dist/
