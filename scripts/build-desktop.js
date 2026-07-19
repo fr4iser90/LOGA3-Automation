@@ -222,6 +222,9 @@ function validateStagedApp(appDir, srcFiles = listSrcFiles()) {
 
     // Load core modules without starting the HTTP server / browser.
     const smoke = [
+        "const fs=require('fs');const path=require('path');",
+        "const gui=path.join(process.cwd(),'gui','index.html');",
+        "if(!fs.existsSync(gui)) throw new Error('gui/index.html missing next to staged server');",
         "require('./loga3-i18n');",
         "require('./loga3-log');",
         "require('./loga3-settings');",

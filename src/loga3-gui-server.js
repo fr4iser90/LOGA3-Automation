@@ -26,8 +26,18 @@ const { t, getMessages, setLocale } = require('./loga3-i18n');
 applySettingsToEnv(process.env);
 const PORT = Number(process.env.LOGA3_GUI_PORT) || 3847;
 const HOST = process.env.LOGA3_GUI_HOST || '127.0.0.1';
-const PROJECT_ROOT = path.join(__dirname, '..');
-const GUI_DIR = path.join(PROJECT_ROOT, 'gui');
+
+// Dev: src/loga3-gui-server.js → ../gui
+// Portable AppImage/zip: flattened app/loga3-gui-server.js → ./gui
+const PORTABLE_LAYOUT = fs.existsSync(path.join(__dirname, 'gui', 'index.html'));
+const PROJECT_ROOT = PORTABLE_LAYOUT
+    ? (process.env.LOGA3_BUNDLE_ROOT || path.join(__dirname, '..'))
+    : path.join(__dirname, '..');
+const APP_ROOT = PORTABLE_LAYOUT ? __dirname : PROJECT_ROOT;
+const GUI_DIR = PORTABLE_LAYOUT
+    ? path.join(__dirname, 'gui')
+    : path.join(PROJECT_ROOT, 'gui');
+
 const MIME_TYPES = {
     '.html': 'text/html; charset=utf-8',
     '.css': 'text/css; charset=utf-8',
@@ -168,7 +178,7 @@ function startDownload(request) {
     pushLog(t('log2fa'));
 
     jobChild = spawn(process.execPath, args, {
-        cwd: PROJECT_ROOT,
+        cwd: APP_ROOT,
         env,
     });
 
@@ -339,6 +349,11 @@ server.on('error', (error) => {
 server.listen(PORT, HOST, () => {
     const displayHost = HOST === '0.0.0.0' ? 'localhost' : HOST;
     const url = `http://${displayHost}:${PORT}`;
+    if (!fs.existsSync(path.join(GUI_DIR, 'index.html'))) {
+        console.error(`❌ GUI files missing at ${GUI_DIR}`);
+        console.error('   Portable builds need gui/ next to loga3-gui-server.js');
+        process.exit(1);
+    }
     console.log(`LOGA3 GUI: ${url} (bind ${HOST})`);
     console.log(`Downloads: ${getDownloadsDir()}`);
     if (!isConfigured()) {
