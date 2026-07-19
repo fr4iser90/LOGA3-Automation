@@ -14,10 +14,13 @@ function expectedFirstWeekdayCode(month, year) {
     return WEEKDAY_CODES[date.getDay()];
 }
 
+const { debugLog, debugError, isDebug } = require('./loga3-log');
+
 require('dotenv').config({
     path: process.env.LOGA3_PORTABLE_ROOT
         ? path.join(process.env.LOGA3_PORTABLE_ROOT, '.env')
         : path.join(__dirname, '..', '.env'),
+    quiet: true,
 });
 applySettingsToEnv(process.env);
 
@@ -25,7 +28,7 @@ let config = {};
 try {
     config = require(path.join(__dirname, '..', 'loga3-config.js'));
 } catch (error) {
-    console.log('ℹ️  No loga3-config.js — using GUI settings / .env / environment variables');
+    debugLog('ℹ️  No loga3-config.js — using GUI settings / .env / environment variables');
 }
 
 /**
@@ -83,7 +86,7 @@ class Loga3Workflow {
         const monthLabel = targetMonth ? MONTH_LABELS[targetMonth - 1] : null;
         const before = beforeSnapshot || { sample: '', length: 0 };
 
-        console.log('⏳ Waiting for main content area to update...');
+        debugLog('⏳ Waiting for main content area to update...');
 
         await this.waitForLoadingIndicatorToSettle(20);
 
@@ -116,10 +119,10 @@ class Loga3Workflow {
 
             await this.waitForLoadingIndicatorToSettle(10);
             await this.page.waitForTimeout(this.uiDelay);
-            console.log('✅ Main content area updated');
+            debugLog('✅ Main content area updated');
             return true;
         } catch {
-            console.log('⚠️  Main content area did not change in time');
+            debugLog('⚠️  Main content area did not change in time');
             return false;
         }
     }
@@ -293,7 +296,7 @@ class Loga3Workflow {
             // ignore log write failures
         }
 
-        console.log(
+        debugLog(
             `🧪 CONTENT[${event}] picker=${entry.picker || '?'} `
             + `bookings=${entry.bookingsLabel || '?'} day01=${entry.firstWeekday || '?'} `
             + `last=${entry.lastDay || '?'} days=${entry.dayCount || 0}`
@@ -313,7 +316,7 @@ class Loga3Workflow {
             const sig = await this.getContentSignature();
             // Ignore Buchungen-für title flips — only day01 / lastDay / booking ranges count.
             if (sig.gridKey && sig.gridKey !== beforeGridKey) {
-                console.log(
+                debugLog(
                     `✅ Day-grid changed: ${beforeGridKey.slice(0, 40)} → ${sig.gridKey.slice(0, 40)}`
                 );
                 return sig;
@@ -321,7 +324,7 @@ class Loga3Workflow {
             await this.waitForLoadingIndicatorToSettle(2);
             await this.page.waitForTimeout(400);
         }
-        console.log('⚠️  Day-grid did not change in time (title-only flips ignored)');
+        debugLog('⚠️  Day-grid did not change in time (title-only flips ignored)');
         return null;
     }
 
@@ -352,7 +355,7 @@ class Loga3Workflow {
         );
 
         if (!quiet) {
-            console.log(
+            debugLog(
                 `🔎 CONTENT CHECK target=${monthLabel} ${year} expectedDay01=${expectedWd} last=${expectedLastDay} | `
                 + `picker=${picker?.label || picker?.selecteddate || '?'} `
                 + `titleFlip=${titleFlipOnly} day01=${sig.firstWeekday || '?'} `
@@ -362,18 +365,18 @@ class Loga3Workflow {
         }
 
         if (!headerOk) {
-            if (!quiet) console.log('❌ CONTENT INVALID: selecteddate/header does not match target');
+            if (!quiet) debugLog('❌ CONTENT INVALID: selecteddate/header does not match target');
             return false;
         }
 
         if (!sig.firstWeekday) {
-            if (!quiet) console.log('❌ CONTENT INVALID: could not read day01 weekday from grid');
+            if (!quiet) debugLog('❌ CONTENT INVALID: could not read day01 weekday from grid');
             return false;
         }
 
         if (!weekdayOk) {
             if (!quiet) {
-                console.log(
+                debugLog(
                     `❌ CONTENT INVALID: grid day01=${sig.firstWeekday} expected=${expectedWd} `
                     + `(header/title may have flipped without reloading the day grid)`
                 );
@@ -384,7 +387,7 @@ class Loga3Workflow {
         // June etc.: last day must shrink (catches sticky 31-day July grid).
         if (sig.lastDay && !lastDayOk) {
             if (!quiet) {
-                console.log(
+                debugLog(
                     `❌ CONTENT INVALID: grid lastDay=${sig.lastDay} expected=${expectedLastDay}`
                 );
             }
@@ -392,7 +395,7 @@ class Loga3Workflow {
         }
 
         if (!quiet) {
-            console.log('✅ CONTENT VALID (header + day01 weekday' + (sig.lastDay ? ' + lastDay' : '') + ')');
+            debugLog('✅ CONTENT VALID (header + day01 weekday' + (sig.lastDay ? ' + lastDay' : '') + ')');
         }
         return true;
     }
@@ -445,7 +448,7 @@ class Loga3Workflow {
                 const locator = this.page.locator(selector).filter({ visible: true }).first();
                 if (await locator.isVisible({ timeout: 1500 })) {
                     await locator.click({ timeout: 3000 });
-                    console.log(`✅ Closed Zeitdaten mask (${selector})`);
+                    debugLog(`✅ Closed Zeitdaten mask (${selector})`);
                     await this.waitForLoadingIndicatorToSettle(10);
                     return true;
                 }
@@ -453,7 +456,7 @@ class Loga3Workflow {
                 continue;
             }
         }
-        console.log('⚠️  Could not find Zeitdaten mask close control');
+        debugLog('⚠️  Could not find Zeitdaten mask close control');
         return false;
     }
 
@@ -463,26 +466,26 @@ class Loga3Workflow {
     }
 
     async nudgeMonthContentReload(targetMonth, targetYear) {
-        console.log('🔄 Nudge = Monthpicker re-select (arrows disabled)');
+        debugLog('🔄 Nudge = Monthpicker re-select (arrows disabled)');
         return this.forceGridReload(targetMonth, targetYear);
     }
 
     async assertContentReadyBeforeExport(targetMonth, targetYear) {
         const label = `${String(targetMonth).padStart(2, '0')}/${targetYear}`;
-        console.log(`🔒 Pre-export content gate for ${label} — will NOT export until day-grid is valid`);
+        debugLog(`🔒 Pre-export content gate for ${label} — will NOT export until day-grid is valid`);
 
         for (let attempt = 1; attempt <= 8; attempt++) {
             await this.logContentDebug('gate-attempt', { attempt, target: label });
             if (await this.verifyCalendarShowsMonth(targetMonth, targetYear)) {
                 await this.clickBerechnenIfPresent();
                 if (await this.verifyCalendarShowsMonth(targetMonth, targetYear)) {
-                    console.log(`✅ Pre-export gate passed for ${label}`);
+                    debugLog(`✅ Pre-export gate passed for ${label}`);
                     await this.logContentDebug('gate-passed', { target: label });
                     return true;
                 }
             }
 
-            console.log(`⏳ Content not ready for export (${attempt}/8) — forcing grid reload`);
+            debugLog(`⏳ Content not ready for export (${attempt}/8) — forcing grid reload`);
             await this.nudgeMonthContentReload(targetMonth, targetYear);
             await this.page.waitForTimeout(1000);
         }
@@ -502,7 +505,7 @@ class Loga3Workflow {
             const ok = await this.verifyCalendarShowsMonth(targetMonth, targetYear, { quiet: true });
             if (ok) {
                 await this.verifyCalendarShowsMonth(targetMonth, targetYear);
-                console.log('✅ Calendar grid matches target month');
+                debugLog('✅ Calendar grid matches target month');
                 return true;
             }
             // verify already logs; throttle extra noise by short sleeps
@@ -510,11 +513,11 @@ class Loga3Workflow {
             const now = Date.now();
             if (now - lastLog > 4000) {
                 lastLog = now;
-                console.log('⏳ Still waiting for day-grid reload...');
+                debugLog('⏳ Still waiting for day-grid reload...');
             }
             await this.page.waitForTimeout(800);
         }
-        console.log('❌ Calendar grid still does not match target month');
+        debugLog('❌ Calendar grid still does not match target month');
         return false;
     }
 
@@ -584,18 +587,18 @@ class Loga3Workflow {
     }
 
     async waitForUiReady(label = '') {
-        if (label) console.log(`⏳ UI ready: ${label}`);
+        if (label) debugLog(`⏳ UI ready: ${label}`);
         await this.waitForLoadingIndicatorToSettle(12);
         await this.page.waitForTimeout(this.uiDelay);
-        if (label) console.log(`✅ UI ready: ${label}`);
+        if (label) debugLog(`✅ UI ready: ${label}`);
     }
 
     async waitForFullNavigation() {
-        console.log('⏳ Waiting for initial navigation...');
+        debugLog('⏳ Waiting for initial navigation...');
         try {
             await this.page.waitForLoadState('domcontentloaded', { timeout: this.pageLoadTimeout });
         } catch {
-            console.log('ℹ️  domcontentloaded timeout, continuing...');
+            debugLog('ℹ️  domcontentloaded timeout, continuing...');
         }
         await this.waitForUiReady('Navigation');
     }
@@ -614,7 +617,7 @@ class Loga3Workflow {
             return element && element.offsetParent !== null;
         }, selector, { timeout: this.elementTimeout });
         await this.waitForLoadingIndicatorToSettle(8);
-        console.log(`✅ Element ready: ${label}`);
+        debugLog(`✅ Element ready: ${label}`);
     }
 
     async waitForMonthPickerReady() {
@@ -677,13 +680,13 @@ class Loga3Workflow {
                 await this.page.waitForTimeout(Math.max(this.uiDelay, 2500));
                 await this.waitForLoadingIndicatorToSettle(12);
                 const changed = await this.waitForContentSignatureChange(beforeSig, 2500);
-                console.log(
+                debugLog(
                     `✅ Month arrow clicked (near picker depth=${nearPicker.depth}) `
                     + `gridChanged=${Boolean(changed)}`
                 );
                 return true;
             } catch (error) {
-                console.log(`⚠️  Near-picker arrow click failed: ${error.message}`);
+                debugLog(`⚠️  Near-picker arrow click failed: ${error.message}`);
             }
         }
 
@@ -710,7 +713,7 @@ class Loga3Workflow {
                     await this.page.waitForTimeout(Math.max(this.uiDelay, 2500));
                     await this.waitForLoadingIndicatorToSettle(12);
                     const changed = await this.waitForContentSignatureChange(beforeSig, 2500);
-                    console.log(
+                    debugLog(
                         `✅ Month arrow clicked (${selector}) gridChanged=${Boolean(changed)} `
                         + `day01=${beforeSig.firstWeekday}→${(await this.getContentSignature()).firstWeekday}`
                     );
@@ -755,7 +758,7 @@ class Loga3Workflow {
             await this.page.waitForTimeout(Math.max(this.uiDelay, 2500));
             await this.waitForLoadingIndicatorToSettle(12);
             await this.waitForContentSignatureChange(beforeSig, 8000);
-            console.log('✅ Month arrow clicked (geometry fallback)');
+            debugLog('✅ Month arrow clicked (geometry fallback)');
             return true;
         }
 
@@ -773,7 +776,7 @@ class Loga3Workflow {
                     timeout: this.elementTimeout,
                     state: 'visible',
                 });
-                console.log('✅ Export section visible');
+                debugLog('✅ Export section visible');
                 return true;
             } catch {
                 continue;
@@ -796,7 +799,7 @@ class Loga3Workflow {
     }
 
     async init() {
-        console.log('🚀 Starting LOGA3 workflow automation...');
+        debugLog('🚀 Starting LOGA3 workflow automation...');
         
         // Launch browser based on config
         const browserType = this.browserConfig.type || 'chromium';
@@ -830,7 +833,7 @@ class Loga3Workflow {
         if (!fs.existsSync(this.downloadsDir)) {
             fs.mkdirSync(this.downloadsDir, { recursive: true });
         }
-        console.log(`📁 Downloads folder: ${this.downloadsDir}`);
+        debugLog(`📁 Downloads folder: ${this.downloadsDir}`);
 
         const context = await this.browser.newContext({
             viewport: { width: 1280, height: 720 },
@@ -849,7 +852,7 @@ class Loga3Workflow {
     }
 
     async clickOpenButton() {
-        console.log('🔍 Looking for "öffnen" button...');
+        debugLog('🔍 Looking for "öffnen" button...');
 
         try {
             // Multiple "öffnen" buttons exist; only click a visible one.
@@ -861,14 +864,14 @@ class Loga3Workflow {
             await openButton.waitFor({ state: 'visible', timeout: this.elementTimeout });
             await openButton.scrollIntoViewIfNeeded().catch(() => {});
             await openButton.click({ timeout: this.elementTimeout });
-            console.log('✅ "öffnen" button clicked');
+            debugLog('✅ "öffnen" button clicked');
 
             // New mask session — must re-arm Aktualisieren before month nav reloads grid.
             this._calendarReloadArmed = false;
             await this.waitForMonthPickerReady();
             return true;
         } catch (error) {
-            console.log('❌ "öffnen" button not found or click failed:', error.message);
+            debugLog('❌ "öffnen" button not found or click failed:', error.message);
             throw new Error(`open ("öffnen") button click failed: ${error.message}`);
         }
     }
@@ -878,23 +881,23 @@ class Loga3Workflow {
         const maxAttempts = 4;
 
         for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-            console.log(`🔍 Looking for smartedingeborder icon (${attempt}/${maxAttempts})...`);
+            debugLog(`🔍 Looking for smartedingeborder icon (${attempt}/${maxAttempts})...`);
 
             try {
                 await this.waitForSelectorReady(selector, 'smartedingeborder');
 
                 await this.page.click(selector);
-                console.log('✅ Smartedingeborder icon clicked');
+                debugLog('✅ Smartedingeborder icon clicked');
 
                 await this.waitForExportPanel();
                 return true;
             } catch (error) {
                 if (attempt === maxAttempts) {
-                    console.log('❌ Smartedingeborder icon not found or click failed:', error.message);
+                    debugLog('❌ Smartedingeborder icon not found or click failed:', error.message);
                     throw new Error(`Smartedingeborder icon click failed: ${error.message}`);
                 }
 
-                console.log(`⏳ Icon not ready yet, retrying in ${this.stepDelay}ms...`);
+                debugLog(`⏳ Icon not ready yet, retrying in ${this.stepDelay}ms...`);
                 await this.page.waitForTimeout(this.stepDelay);
             }
         }
@@ -903,13 +906,13 @@ class Loga3Workflow {
     }
 
     async clickZeitprotokollGenerieren(targetMonth = null, targetYear = null) {
-        console.log('🔍 Looking for "Zeitprotokoll generieren" button...');
+        debugLog('🔍 Looking for "Zeitprotokoll generieren" button...');
         
         try {
             await this.waitForZeitprotokollButton();
 
             await this.page.click('div.LGSmartThingContentItem[data-uin="smartthing-LAGSDZPG"]');
-            console.log('✅ First click on "Zeitprotokoll generieren"');
+            debugLog('✅ First click on "Zeitprotokoll generieren"');
             
             // Wait a moment
             await this.page.waitForTimeout(1000);
@@ -918,7 +921,7 @@ class Loga3Workflow {
             await this.page.click('div.LGSmartThingContentItem[data-uin="smartthing-LAGSDZPG"]', { 
                 delay: 1000 
             });
-            console.log('✅ Click and hold (1 sec) on "Zeitprotokoll generieren"');
+            debugLog('✅ Click and hold (1 sec) on "Zeitprotokoll generieren"');
 
             const ready = await this.waitForZeitprotokollReady(targetMonth, targetYear);
             if (!ready) {
@@ -926,13 +929,13 @@ class Loga3Workflow {
             }
             return true;
         } catch (error) {
-            console.log('❌ "Zeitprotokoll generieren" button not found or click failed:', error.message);
+            debugLog('❌ "Zeitprotokoll generieren" button not found or click failed:', error.message);
             throw new Error(`Zeitprotokoll generieren click failed: ${error.message}`);
         }
     }
 
     async clickExportButton() {
-        console.log('🔍 Looking for "Export" button...');
+        debugLog('🔍 Looking for "Export" button...');
         
         try {
             // Wait for the export button to be visible (try multiple possible selectors)
@@ -955,7 +958,7 @@ class Loga3Workflow {
                     await this.page.waitForSelector(selector, { timeout: Math.min(this.elementTimeout, 15000) });
                     exportButton = await this.page.$(selector);
                     if (exportButton) {
-                        console.log(`✅ Found export button with selector: ${selector}`);
+                        debugLog(`✅ Found export button with selector: ${selector}`);
                         break;
                     }
                 } catch (e) {
@@ -995,12 +998,12 @@ class Loga3Workflow {
             
             // Click the export button - it's already selected, just click it
             await this.page.click('div.MenuItem[data-uin="smartthing-cat-exports"]');
-            console.log('✅ Export button clicked');
+            debugLog('✅ Export button clicked');
 
             await this.waitForZeitprotokollButton();
             return true;
         } catch (error) {
-            console.log('❌ Export button not found or click failed:', error.message);
+            debugLog('❌ Export button not found or click failed:', error.message);
             throw new Error(`Export button click failed: ${error.message}`);
         }
     }
@@ -1036,16 +1039,16 @@ class Loga3Workflow {
     async logHeaderMonth(contextLabel) {
         const state = await this.getMonthPickerState();
         if (state?.month && state?.year) {
-            console.log(`📆 ${contextLabel}: ${state.label} (selecteddate=${state.selecteddate})`);
+            debugLog(`📆 ${contextLabel}: ${state.label} (selecteddate=${state.selecteddate})`);
             return state;
         }
 
         if (state?.label) {
-            console.log(`📆 ${contextLabel}: ${state.label} (without selecteddate)`);
+            debugLog(`📆 ${contextLabel}: ${state.label} (without selecteddate)`);
             return state;
         }
 
-        console.log(`ℹ️  ${contextLabel}: ZeitdatenMonthPicker not visible`);
+        debugLog(`ℹ️  ${contextLabel}: ZeitdatenMonthPicker not visible`);
         return null;
     }
 
@@ -1070,7 +1073,7 @@ class Loga3Workflow {
                 if (await locator.isVisible({ timeout: 3000 })) {
                     await locator.click();
                     await this.page.waitForTimeout(this.uiDelay);
-                    console.log(`✅ Month arrow clicked (${selector})`);
+                    debugLog(`✅ Month arrow clicked (${selector})`);
                     return true;
                 }
             } catch {
@@ -1161,7 +1164,7 @@ class Loga3Workflow {
         await this.page.click('#ZeitdatenMonthPicker');
         await this.page.waitForTimeout(400);
         await this.waitForMonthPickerPopup();
-        console.log('✅ Monthpicker dropdown opened');
+        debugLog('✅ Monthpicker dropdown opened');
     }
 
     async getDropdownDisplayedYear() {
@@ -1181,11 +1184,11 @@ class Loga3Workflow {
      */
     async armCalendarMonthReload() {
         if (this._calendarReloadArmed) {
-            console.log('ℹ️  Calendar month-reload already armed');
+            debugLog('ℹ️  Calendar month-reload already armed');
             return true;
         }
 
-        console.log('🔄 Arming calendar month-reload (Aktualisieren / ic-zaxisrotation)...');
+        debugLog('🔄 Arming calendar month-reload (Aktualisieren / ic-zaxisrotation)...');
         const before = await this.getContentSignature();
 
         const selectors = [
@@ -1201,7 +1204,7 @@ class Loga3Workflow {
                 if (!(await locator.count())) continue;
                 await locator.scrollIntoViewIfNeeded().catch(() => {});
                 await locator.click({ force: true, timeout: 5000 });
-                console.log(`✅ Aktualisieren clicked (${selector})`);
+                debugLog(`✅ Aktualisieren clicked (${selector})`);
                 await this.waitForLoadingIndicatorToSettle(25);
                 await this.page.waitForTimeout(Math.max(this.uiDelay, 1500));
                 await this.waitForContentSignatureChange(before, 8000);
@@ -1209,11 +1212,11 @@ class Loga3Workflow {
                 await this.logContentDebug('calendar-reload-armed');
                 return true;
             } catch (error) {
-                console.log(`⚠️  Aktualisieren via ${selector}: ${error.message}`);
+                debugLog(`⚠️  Aktualisieren via ${selector}: ${error.message}`);
             }
         }
 
-        console.log('❌ Could not click Aktualisieren — month arrows may not reload grid');
+        debugLog('❌ Could not click Aktualisieren — month arrows may not reload grid');
         return false;
     }
 
@@ -1228,7 +1231,7 @@ class Loga3Workflow {
         const year = String(targetYear);
         const monthIndex = MONTH_LABELS.indexOf(monthLabel) + 1;
         if (monthIndex < 1) {
-            console.log(`⚠️  Unknown month label: ${monthLabel}`);
+            debugLog(`⚠️  Unknown month label: ${monthLabel}`);
             return false;
         }
 
@@ -1253,7 +1256,7 @@ class Loga3Workflow {
 
         for (let attempt = 0; attempt < 36; attempt++) {
             sel = await readSelector();
-            console.log(`📆 Monthpicker selector active=${sel?.active || '?'} year=${sel?.year || '?'} → ${monthLabel} ${year}`);
+            debugLog(`📆 Monthpicker selector active=${sel?.active || '?'} year=${sel?.year || '?'} → ${monthLabel} ${year}`);
             if (sel?.active === monthLabel && sel?.year === year) break;
 
             const shownYear = Number(sel?.year) || Number(year);
@@ -1278,18 +1281,18 @@ class Loga3Workflow {
 
         sel = await readSelector();
         if (!(sel?.active === monthLabel && sel?.year === year)) {
-            console.log(`⚠️  Monthpicker could not reach ${monthLabel} ${year} (at ${sel?.active} ${sel?.year})`);
+            debugLog(`⚠️  Monthpicker could not reach ${monthLabel} ${year} (at ${sel?.active} ${sel?.year})`);
             return false;
         }
 
         const cell = popup.locator('table.datePickerMonthPicker td').filter({ hasText: new RegExp(`^${monthLabel}$`) });
         if (await cell.count() === 0) {
-            console.log(`⚠️  Month cell "${monthLabel}" missing`);
+            debugLog(`⚠️  Month cell "${monthLabel}" missing`);
             return false;
         }
         await cell.first().click({ delay: 80 });
         await this.page.waitForTimeout(800);
-        console.log(`✅ Monthpicker clicked month cell: ${monthLabel} ${year}`);
+        debugLog(`✅ Monthpicker clicked month cell: ${monthLabel} ${year}`);
         return true;
     }
 
@@ -1324,7 +1327,7 @@ class Loga3Workflow {
         const mm = String(targetMonth).padStart(2, '0');
         const year = String(targetYear);
         const targetNum = this.periodToNumber(mm, year);
-        console.log('📆 Navigating via Monthpicker chrome arrows to', `${mm}/${year}`);
+        debugLog('📆 Navigating via Monthpicker chrome arrows to', `${mm}/${year}`);
 
         for (let step = 0; step < 24; step++) {
             const state = await this.getMonthPickerState();
@@ -1355,7 +1358,7 @@ class Loga3Workflow {
             }, dir);
 
             if (!clicked) {
-                console.log('⚠️  Monthpicker chrome arrow not found');
+                debugLog('⚠️  Monthpicker chrome arrow not found');
                 return false;
             }
             await this.waitForMonthPickerChange(before, 8000);
@@ -1392,14 +1395,14 @@ class Loga3Workflow {
             }
 
             // LOGA3 often ignores past-month cell commit — use chrome arrows (works after arm).
-            console.log(
+            debugLog(
                 `⚠️  Monthpicker cell did not commit (header=${current?.month}/${current?.year}) — using chrome arrows`
             );
             await this.page.keyboard.press('Escape').catch(() => {});
             return this.syncHeaderWithMonthpickerChromeArrows(targetMonth, targetYear);
         } catch (error) {
             await this.page.keyboard.press('Escape').catch(() => {});
-            console.log(`⚠️  Monthpicker selection failed: ${error.message}`);
+            debugLog(`⚠️  Monthpicker selection failed: ${error.message}`);
             return this.syncHeaderWithMonthpickerChromeArrows(targetMonth, targetYear);
         }
     }
@@ -1412,7 +1415,7 @@ class Loga3Workflow {
         try {
             await this.waitForMonthPickerReady();
         } catch (error) {
-            console.log(`⚠️  ZeitdatenMonthPicker not found: ${error.message}`);
+            debugLog(`⚠️  ZeitdatenMonthPicker not found: ${error.message}`);
             return false;
         }
 
@@ -1421,7 +1424,7 @@ class Loga3Workflow {
 
         let current = await this.getMonthPickerState();
         if (current) {
-            console.log(
+            debugLog(
                 `📆 Current: ${current.month}/${current.year} (${current.label}) `
                 + `→ Target: ${mm}/${year} (${monthLabel} ${year})`
             );
@@ -1430,12 +1433,12 @@ class Loga3Workflow {
         const finishIfGridReady = async (contextLabel) => {
             current = await this.getMonthPickerState();
             if (current?.month !== mm || current?.year !== year) {
-                console.log(
+                debugLog(
                     `⚠️  ${contextLabel}: header=${current?.month}/${current?.year}, expected ${mm}/${year}`
                 );
                 return false;
             }
-            console.log(`📆 ${contextLabel}: header=${current.label}, verifying day-grid...`);
+            debugLog(`📆 ${contextLabel}: header=${current.label}, verifying day-grid...`);
             await this.logContentDebug('header-reached', { context: contextLabel, target: `${mm}/${year}` });
 
             if (await this.waitUntilCalendarShowsMonth(targetMonth, targetYear, 20000)) {
@@ -1443,7 +1446,7 @@ class Loga3Workflow {
             }
 
             // Re-arm and navigate again if grid still stale.
-            console.log('⚠️  Grid still stale — re-arm Aktualisieren and re-navigate');
+            debugLog('⚠️  Grid still stale — re-arm Aktualisieren and re-navigate');
             this._calendarReloadArmed = false;
             await this.armCalendarMonthReload();
             await this.syncHeaderWithMonthpickerChromeArrows(targetMonth, targetYear);
@@ -1453,7 +1456,7 @@ class Loga3Workflow {
 
             await this.takeScreenshot(`month-grid-mismatch-${mm}-${year}.png`);
             const state = await this.getCalendarContentState();
-            console.log(
+            debugLog(
                 `❌ Grid mismatch: header=${mm}/${year} day01=${state?.firstWeekday} last=${state?.lastDay}`
             );
             await this.logContentDebug('grid-mismatch', { target: `${mm}/${year}`, state });
@@ -1465,7 +1468,7 @@ class Loga3Workflow {
             if (await this.verifyCalendarShowsMonth(targetMonth, targetYear, { quiet: true })) {
                 return finishIfGridReady('Already on month with valid grid');
             }
-            console.log('📆 Header matches but grid stale — step away/back after arm');
+            debugLog('📆 Header matches but grid stale — step away/back after arm');
             await this.syncHeaderWithMonthpickerChromeArrows(
                 targetMonth === 12 ? 1 : targetMonth + 1,
                 targetMonth === 12 ? targetYear + 1 : targetYear
@@ -1474,7 +1477,7 @@ class Loga3Workflow {
             return finishIfGridReady('Re-approached target after arm');
         }
 
-        console.log('📆 Navigate to target (armed chrome arrows / Monthpicker)');
+        debugLog('📆 Navigate to target (armed chrome arrows / Monthpicker)');
         const picked = await this.selectMonthViaMonthpickerOnly(targetMonth, targetYear);
         if (!picked) {
             await this.takeScreenshot(`month-picker-failed-${mm}-${year}.png`);
@@ -1573,23 +1576,23 @@ class Loga3Workflow {
         const year = preferred ? String(preferred.year) : null;
         const monthLabel = preferred ? MONTH_LABELS[preferred.month - 1] : null;
 
-        console.log('⏳ Waiting for Zeitprotokoll dialog...');
+        debugLog('⏳ Waiting for Zeitprotokoll dialog...');
 
         for (let attempt = 1; attempt <= 16; attempt++) {
             const dialogVisible = await this.isZeitprotokollDialogVisible();
             if (!dialogVisible) {
-                console.log(`⏳ Zeitprotokoll dialog not visible (${attempt}/16)...`);
+                debugLog(`⏳ Zeitprotokoll dialog not visible (${attempt}/16)...`);
                 await this.page.waitForTimeout(2000);
                 continue;
             }
 
             if (!preferred) {
-                console.log('✅ Zeitprotokoll dialog visible');
+                debugLog('✅ Zeitprotokoll dialog visible');
                 return true;
             }
 
             const dialogPeriod = await this.getDialogAbrechnungsmonat();
-            console.log(`🧾 Dialog Abrechnungsmonat: ${JSON.stringify(dialogPeriod)}`);
+            debugLog(`🧾 Dialog Abrechnungsmonat: ${JSON.stringify(dialogPeriod)}`);
 
             if (dialogPeriod?.monthToken && dialogPeriod?.year) {
                 const parsed = parseAbrechnungsmonat(
@@ -1601,17 +1604,17 @@ class Loga3Workflow {
                 );
 
                 if (parsed && parsed.month === mm && parsed.year === year) {
-                    console.log(`✅ Zeitprotokoll dialog matches target ${mm}/${year}`);
+                    debugLog(`✅ Zeitprotokoll dialog matches target ${mm}/${year}`);
                     return true;
                 }
 
-                console.log(
+                debugLog(
                     `⚠️  Dialog period ${parsed?.month}/${parsed?.year} != target ${mm}/${year} (${attempt}/16)`
                 );
             } else {
                 // Dialog often has no Abrechnungsmonat label — rely on pre-export content gate.
                 // Do NOT treat calendar "Buchungen für …" as dialog confirmation.
-                console.log(
+                debugLog(
                     `✅ Zeitprotokoll dialog visible without Abrechnungsmonat label `
                     + `(${attempt}/16) — relying on pre-export content gate`
                 );
@@ -1672,7 +1675,7 @@ class Loga3Workflow {
         let filename;
         if (targetMonth && targetYear) {
             filename = periodToFilename(targetMonth, targetYear);
-            console.log(`📄 Filename after pre-export validation: ${filename}`);
+            debugLog(`📄 Filename after pre-export validation: ${filename}`);
         } else {
             filename = await this.extractAbrechnungsmonat(targetMonth, targetYear);
         }
@@ -1708,7 +1711,7 @@ class Loga3Workflow {
             throw new Error(`Download empty or invalid: ${savePath}`);
         }
 
-        console.log(`📥 Saved: ${savePath} (${stat.size} bytes)`);
+        debugLog(`📥 Saved: ${savePath} (${stat.size} bytes)`);
 
         // Safety net only — primary protection is assertContentReadyBeforeExport.
         if (targetMonth && targetYear) {
@@ -1721,24 +1724,26 @@ class Loga3Workflow {
             }
         }
 
-        await fs.promises.writeFile(`${savePath}.meta.json`, JSON.stringify({
-            filename,
-            targetMonth,
-            targetYear,
-            savedAt: new Date().toISOString(),
-            bytes: stat.size,
-            md5: require('crypto').createHash('md5').update(await fs.promises.readFile(savePath)).digest('hex'),
-            fingerprint: await this.getBookingFingerprint(),
-            picker: await this.getMonthPickerState(),
-            calendar: await this.getCalendarContentState(),
-        }, null, 2));
+        if (isDebug()) {
+            await fs.promises.writeFile(`${savePath}.meta.json`, JSON.stringify({
+                filename,
+                targetMonth,
+                targetYear,
+                savedAt: new Date().toISOString(),
+                bytes: stat.size,
+                md5: require('crypto').createHash('md5').update(await fs.promises.readFile(savePath)).digest('hex'),
+                fingerprint: await this.getBookingFingerprint(),
+                picker: await this.getMonthPickerState(),
+                calendar: await this.getCalendarContentState(),
+            }, null, 2));
+        }
 
         await this.handleDownload(filename);
         return filename;
     }
 
     async clickBerechnenIfPresent() {
-        console.log('🔍 Looking for BERECHNEN button...');
+        debugLog('🔍 Looking for BERECHNEN button...');
         const selectors = [
             'div.LG-Button:has-text("BERECHNEN")',
             'span.LG-Button:has-text("BERECHNEN")',
@@ -1755,7 +1760,7 @@ class Loga3Workflow {
                 if (await locator.isVisible({ timeout: 2000 })) {
                     await locator.scrollIntoViewIfNeeded().catch(() => {});
                     await locator.click({ timeout: this.elementTimeout });
-                    console.log(`✅ BERECHNEN clicked (${selector})`);
+                    debugLog(`✅ BERECHNEN clicked (${selector})`);
                     await this.waitForLoadingIndicatorToSettle(20);
                     await this.page.waitForTimeout(this.stepDelay);
                     return true;
@@ -1781,7 +1786,7 @@ class Loga3Workflow {
                 return true;
             });
             if (found) {
-                console.log('✅ BERECHNEN clicked (DOM text scan)');
+                debugLog('✅ BERECHNEN clicked (DOM text scan)');
                 await this.waitForLoadingIndicatorToSettle(20);
                 await this.page.waitForTimeout(this.stepDelay);
                 return true;
@@ -1790,7 +1795,7 @@ class Loga3Workflow {
             // ignore
         }
 
-        console.log('ℹ️  BERECHNEN not visible — continuing');
+        debugLog('ℹ️  BERECHNEN not visible — continuing');
         return false;
     }
 
@@ -1825,19 +1830,19 @@ class Loga3Workflow {
         const year = String(targetYear);
         const expected = `${mm}/${year}`;
         const info = this.extractAbrechnungsmonatFromPdf(filePath);
-        console.log(`🔎 PDF period check ${path.basename(filePath)}: ${JSON.stringify(info)}`);
+        debugLog(`🔎 PDF period check ${path.basename(filePath)}: ${JSON.stringify(info)}`);
 
         if (!info.abrechnungsmonat) {
-            console.log('⚠️  Could not read Abrechnungsmonat from PDF text');
+            debugLog('⚠️  Could not read Abrechnungsmonat from PDF text');
             return false;
         }
 
         if (info.abrechnungsmonat !== expected) {
-            console.log(`❌ PDF Abrechnungsmonat ${info.abrechnungsmonat} != expected ${expected}`);
+            debugLog(`❌ PDF Abrechnungsmonat ${info.abrechnungsmonat} != expected ${expected}`);
             return false;
         }
 
-        console.log(`✅ PDF Abrechnungsmonat matches ${expected}`);
+        debugLog(`✅ PDF Abrechnungsmonat matches ${expected}`);
         return true;
     }
 
@@ -1872,16 +1877,16 @@ class Loga3Workflow {
         try {
             fs.mkdirSync(path.dirname(outPath), { recursive: true });
             fs.writeFileSync(outPath, JSON.stringify(snapshot, null, 2));
-            console.log(`🧾 Export UI debug written: ${outPath}`);
+            debugLog(`🧾 Export UI debug written: ${outPath}`);
         } catch (error) {
-            console.log(`⚠️  Could not write debug json: ${error.message}`);
-            console.log(`🧾 Export UI debug (${label}): ${JSON.stringify(snapshot).slice(0, 2000)}`);
+            debugLog(`⚠️  Could not write debug json: ${error.message}`);
+            debugLog(`🧾 Export UI debug (${label}): ${JSON.stringify(snapshot).slice(0, 2000)}`);
         }
         await this.takeScreenshot(`export-debug-${label}.png`);
     }
 
     async extractAbrechnungsmonat(fallbackMonth, fallbackYear) {
-        console.log('📄 Extracting Abrechnungsmonat from page content...');
+        debugLog('📄 Extracting Abrechnungsmonat from page content...');
 
         try {
             await this.waitForUiReady('Reading Abrechnungsmonat');
@@ -1889,7 +1894,7 @@ class Loga3Workflow {
             const pickerState = await this.getMonthPickerState();
             if (pickerState?.month && pickerState?.year) {
                 const filename = periodToFilename(pickerState.month, pickerState.year);
-                console.log(`✅ Abrechnungsmonat from header: ${pickerState.month}/${pickerState.year} -> ${filename}`);
+                debugLog(`✅ Abrechnungsmonat from header: ${pickerState.month}/${pickerState.year} -> ${filename}`);
                 return filename;
             }
 
@@ -1901,24 +1906,24 @@ class Loga3Workflow {
 
             if (parsed) {
                 const filename = periodToFilename(parsed.month, parsed.year);
-                console.log(`✅ Abrechnungsmonat found: ${parsed.month}/${parsed.year} -> ${filename} (${parsed.source})`);
+                debugLog(`✅ Abrechnungsmonat found: ${parsed.month}/${parsed.year} -> ${filename} (${parsed.source})`);
                 return filename;
             }
 
             if (fallbackMonth && fallbackYear) {
                 const filename = periodToFilename(fallbackMonth, fallbackYear);
-                console.log(`ℹ️  Using selected month as fallback: ${filename}`);
+                debugLog(`ℹ️  Using selected month as fallback: ${filename}`);
                 return filename;
             }
 
             const snippet = text.replace(/\s+/g, ' ').trim().slice(0, 400);
-            console.log('⚠️  Abrechnungsmonat not found in page content');
+            debugLog('⚠️  Abrechnungsmonat not found in page content');
             if (snippet) {
-                console.log(`ℹ️  Page content (excerpt): ${snippet}`);
+                debugLog(`ℹ️  Page content (excerpt): ${snippet}`);
             }
             return null;
         } catch (error) {
-            console.log('❌ Error extracting Abrechnungsmonat:', error.message);
+            debugLog('❌ Error extracting Abrechnungsmonat:', error.message);
             return null;
         }
     }
@@ -1954,7 +1959,7 @@ class Loga3Workflow {
                     await locator.first().scrollIntoViewIfNeeded().catch(() => {});
                     await this.page.waitForTimeout(500);
                     await locator.first().click({ timeout: this.elementTimeout });
-                    console.log(`✅ ${label} clicked`);
+                    debugLog(`✅ ${label} clicked`);
                     return true;
                 }
             } catch {
@@ -1966,7 +1971,7 @@ class Loga3Workflow {
     }
 
     async clickDownloadButton() {
-        console.log('🔍 Looking for download button...');
+        debugLog('🔍 Looking for download button...');
 
         const locatorFactories = [
             (ctx) => ctx.getByRole('button', { name: 'Herunterladen', exact: true }),
@@ -1984,16 +1989,16 @@ class Loga3Workflow {
                 }
             }
 
-            console.log(`⏳ Download button not visible yet (${attempt}/8)...`);
+            debugLog(`⏳ Download button not visible yet (${attempt}/8)...`);
             await this.page.waitForTimeout(3000);
         }
 
-        console.log('⚠️  Download button not found or click failed');
+        debugLog('⚠️  Download button not found or click failed');
         return false;
     }
 
     async clickCloseDialog() {
-        console.log('🔍 Looking for close ("Schließen") button...');
+        debugLog('🔍 Looking for close ("Schließen") button...');
 
         const locatorFactories = [
             (ctx) => ctx.locator('[data-uin="ic-delete"][aria-label="Schließen"]'),
@@ -2015,12 +2020,12 @@ class Loga3Workflow {
             await this.page.waitForTimeout(1500);
         }
 
-        console.log('⚠️  Close ("Schließen") button not found');
+        debugLog('⚠️  Close ("Schließen") button not found');
         return false;
     }
 
     async handleDownload(filename) {
-        console.log('💾 Finalizing download...');
+        debugLog('💾 Finalizing download...');
 
         try {
             const targetName = `${filename}.pdf`;
@@ -2031,13 +2036,13 @@ class Loga3Workflow {
             }
 
             const stat = await fs.promises.stat(targetPath);
-            console.log(`✅ PDF ready: ${targetPath} (${stat.size} bytes)`);
+            debugLog(`✅ PDF ready: ${targetPath} (${stat.size} bytes)`);
 
             await this.clickCloseDialog();
-            console.log(`📁 Downloads folder: ${this.downloadsDir}`);
+            debugLog(`📁 Downloads folder: ${this.downloadsDir}`);
             return true;
         } catch (error) {
-            console.log('❌ Download handling failed:', error.message);
+            debugLog('❌ Download handling failed:', error.message);
             await this.clickCloseDialog().catch(() => {});
             return false;
         }
@@ -2052,7 +2057,7 @@ class Loga3Workflow {
             const screenshotDir = this.screenshotConfig.directory || getLogsDir();
             const screenshotPath = path.join(screenshotDir, filename);
             await this.page.screenshot({ path: screenshotPath, fullPage: true });
-            console.log(`📸 Screenshot saved: ${screenshotPath}`);
+            debugLog(`📸 Screenshot saved: ${screenshotPath}`);
         } catch (error) {
             console.error('❌ Failed to take screenshot:', error.message);
         }
@@ -2061,10 +2066,10 @@ class Loga3Workflow {
     async cleanup() {
         if (this.context) {
             await this.context.close();
-            console.log('🧹 Browser context closed');
+            debugLog('🧹 Browser context closed');
         } else if (this.browser) {
             await this.browser.close();
-            console.log('🧹 Browser closed');
+            debugLog('🧹 Browser closed');
         }
     }
 
@@ -2073,37 +2078,37 @@ class Loga3Workflow {
             await this.init();
             
             // Navigate to LOGA3 first
-            console.log('📡 Navigating to LOGA3...');
+            debugLog('📡 Navigating to LOGA3...');
             const baseUrl = config.baseUrl || 'https://stelisab.pi-asp.de/loga3/#';
             await this.page.goto(baseUrl, { 
                 waitUntil: 'domcontentloaded',
                 timeout: this.pageLoadTimeout 
             });
             await this.waitForFullNavigation();
-            console.log('✅ Successfully loaded LOGA3 page');
+            debugLog('✅ Successfully loaded LOGA3 page');
             
             // Step 1: Click first "öffnen" button
-            console.log('\n📋 Step 1: Clicking first "öffnen" button...');
+            debugLog('\n📋 Step 1: Clicking first "öffnen" button...');
             await this.clickOpenButton();
             await this.takeScreenshot('step1-first-open.png');
             
             // Step 2: Click smartedingeborder icon
-            console.log('\n📋 Step 2: Clicking smartedingeborder icon...');
+            debugLog('\n📋 Step 2: Clicking smartedingeborder icon...');
             await this.clickSmartEdinGeborderIcon();
             await this.takeScreenshot('step2-smartedingeborder.png');
             
             // Step 3: Click "Export" button (MUST be before Zeitprotokoll generieren!)
-            console.log('\n📋 Step 3: Clicking "Export" button...');
+            debugLog('\n📋 Step 3: Clicking "Export" button...');
             await this.clickExportButton();
             await this.takeScreenshot('step3-export.png');
             
             // Step 4: Click "Zeitprotokoll generieren" (now available after export)
-            console.log('\n📋 Step 4: Clicking "Zeitprotokoll generieren"...');
+            debugLog('\n📋 Step 4: Clicking "Zeitprotokoll generieren"...');
             await this.clickZeitprotokollGenerieren();
             await this.takeScreenshot('step4-zeitprotokoll.png');
             
             // Step 5: Extract Abrechnungsmonat
-            console.log('\n📋 Step 5: Extracting Abrechnungsmonat...');
+            debugLog('\n📋 Step 5: Extracting Abrechnungsmonat...');
             const filename = await this.extractAbrechnungsmonat();
             if (!filename) {
                 throw new Error('Step 5 failed: Could not extract Abrechnungsmonat');
@@ -2111,7 +2116,7 @@ class Loga3Workflow {
             await this.takeScreenshot('step5-content-extracted.png');
             
             // Step 6: Click download button
-            console.log('\n📋 Step 6: Clicking download button...');
+            debugLog('\n📋 Step 6: Clicking download button...');
             const step6Success = await this.clickDownloadButton();
             if (!step6Success) {
                 throw new Error('Step 6 failed: Could not click download button');
@@ -2119,23 +2124,23 @@ class Loga3Workflow {
             await this.takeScreenshot('step6-download-clicked.png');
             
             // Step 7: Handle download
-            console.log('\n📋 Step 7: Handling download...');
+            debugLog('\n📋 Step 7: Handling download...');
             const step7Success = await this.handleDownload(filename);
             if (!step7Success) {
                 throw new Error('Step 7 failed: Could not handle download');
             }
             await this.takeScreenshot('step7-downloaded.png');
             
-            console.log('\n🎉 Workflow completed successfully!');
-            console.log(`📁 Downloads saved to: ${this.downloadsDir}`);
+            debugLog('\n🎉 Workflow completed successfully!');
+            debugLog(`📁 Downloads saved to: ${this.downloadsDir}`);
 
             if (process.argv.includes('--once')) {
                 await this.cleanup();
                 return;
             }
 
-            console.log('⏸️  Browser will remain open for manual interaction');
-            console.log('Press Ctrl+C to close the browser');
+            debugLog('⏸️  Browser will remain open for manual interaction');
+            debugLog('Press Ctrl+C to close the browser');
             await new Promise(() => {});
             
         } catch (error) {
@@ -2152,7 +2157,7 @@ if (require.main === module) {
     
     // Handle graceful shutdown
     process.on('SIGINT', async () => {
-        console.log('\n🛑 Shutting down...');
+        debugLog('\n🛑 Shutting down...');
         await workflow.cleanup();
         process.exit(0);
     });

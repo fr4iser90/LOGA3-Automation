@@ -3,92 +3,98 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LOGA3 Zeitprotokolle</title>
+  <title>LOGA3</title>
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
   <main class="app">
     <header class="header">
       <div>
-        <h1>LOGA3 Zeitprotokolle</h1>
-        <p class="subtitle">Lokale Übersicht &amp; Download</p>
+        <h1 data-i18n="appTitle">LOGA3 Zeitprotokolle</h1>
+        <p class="subtitle" data-i18n="appSubtitle">Lokale Übersicht &amp; Download</p>
       </div>
       <div class="header-actions">
         <label>
-          Jahr
+          <span data-i18n="year">Jahr</span>
           <select id="yearSelect"></select>
         </label>
-        <button id="settingsBtn" type="button">Einstellungen</button>
-        <button id="refreshBtn" type="button">Aktualisieren</button>
+        <button id="settingsBtn" type="button" data-i18n="settings">Einstellungen</button>
+        <button id="refreshBtn" type="button" data-i18n="refresh">Aktualisieren</button>
       </div>
     </header>
 
     <p id="setupBanner" class="setup-banner" hidden>
-      Bitte einmal LOGA3-Benutzername und Passwort speichern — danach kannst du Monate laden.
-      <button id="setupBannerBtn" type="button" class="primary">Jetzt einrichten</button>
+      <span data-i18n="setupBanner">Bitte einmal LOGA3-Benutzername und Passwort speichern — danach kannst du Monate laden.</span>
+      <button id="setupBannerBtn" type="button" class="primary" data-i18n="setupNow">Jetzt einrichten</button>
     </p>
 
     <section class="summary" id="summary"></section>
 
     <div class="selection-bar">
-      <span id="selectionInfo">0 Monate ausgewählt</span>
-      <button id="selectMissingBtn" type="button">Alle fehlenden auswählen</button>
-      <button id="clearSelectionBtn" type="button">Auswahl löschen</button>
+      <span id="selectionInfo">0</span>
+      <button id="selectMissingBtn" type="button" data-i18n="selectMissing">Alle fehlenden auswählen</button>
+      <button id="clearSelectionBtn" type="button" data-i18n="clearSelection">Auswahl löschen</button>
     </div>
 
     <section class="months" id="monthsGrid"></section>
 
     <section class="actions">
-      <button id="downloadSelectedBtn" type="button" class="primary">Ausgewählte laden</button>
-      <button id="downloadMissingBtn" type="button">Alle fehlenden laden</button>
-      <button id="downloadCurrentBtn" type="button">Aktuellen LOGA3-Monat</button>
-      <button id="stopBtn" type="button" class="danger" hidden>Abbrechen</button>
+      <button id="downloadSelectedBtn" type="button" class="primary" data-i18n="downloadSelected">Ausgewählte laden</button>
+      <button id="downloadMissingBtn" type="button" data-i18n="downloadMissing">Alle fehlenden laden</button>
+      <button id="downloadCurrentBtn" type="button" data-i18n="downloadCurrent">Aktuellen LOGA3-Monat</button>
+      <button id="stopBtn" type="button" class="danger" hidden data-i18n="stop">Abbrechen</button>
     </section>
 
     <section class="handoff">
-      <p class="hint" style="margin:0">
+      <p class="hint" style="margin:0" data-i18n-html="handoffHint">
         Danach: PDFs in <strong>ShiftPlanConverter</strong> öffnen (Kalender / .ics).
       </p>
-      <button id="openDownloadsBtn" type="button">PDF-Ordner öffnen</button>
-      <button id="openConverterBtn" type="button">Converter öffnen</button>
+      <button id="openDownloadsBtn" type="button" data-i18n="openDownloads">PDF-Ordner öffnen</button>
+      <button id="openConverterBtn" type="button" data-i18n="openConverter">Converter öffnen</button>
     </section>
 
-    <p class="hint">
-      Monate anklicken, dann <strong>Ausgewählte laden</strong>.
-      Bei 2FA im Browserfenster bestätigen.
+    <p class="hint" data-i18n="usageHint">
+      Monate anklicken, dann Ausgewählte laden. Bei 2FA im Browserfenster bestätigen.
     </p>
 
     <section class="log-panel">
-      <h2>Live-Log</h2>
+      <h2 data-i18n="liveLog">Live-Log</h2>
       <pre id="logOutput"></pre>
     </section>
   </main>
 
   <div id="settingsModal" class="modal" hidden>
     <div class="modal-card" role="dialog" aria-labelledby="settingsTitle">
-      <h2 id="settingsTitle">LOGA3-Zugang</h2>
-      <p class="modal-text">
+      <h2 id="settingsTitle" data-i18n="settingsTitle">LOGA3-Zugang</h2>
+      <p class="modal-text" data-i18n="settingsIntro">
         Einmal eingeben und speichern. Das Passwort wird nur lokal auf diesem Rechner abgelegt
         (nicht in der Cloud).
       </p>
       <form id="settingsForm">
         <label>
-          Benutzername
+          <span data-i18n="username">Benutzername</span>
           <input id="settingsUsername" name="username" autocomplete="username" required>
         </label>
         <label>
-          Passwort
+          <span data-i18n="password">Passwort</span>
           <input id="settingsPassword" name="password" type="password" autocomplete="current-password" placeholder="••••••••">
         </label>
-        <p id="passwordHint" class="field-hint" hidden>Leer lassen = bisheriges Passwort behalten</p>
+        <p id="passwordHint" class="field-hint" hidden data-i18n="passwordHint">Leer lassen = bisheriges Passwort behalten</p>
         <label class="checkbox-row">
           <input id="settingsHeadless" type="checkbox">
-          <span>Browser verstecken (Headless) — für Server; zum Mitgucken auslassen</span>
+          <span data-i18n="headless">Browser verstecken (Headless) — für Server; zum Mitgucken auslassen</span>
+        </label>
+        <label>
+          <span data-i18n="language">Sprache</span>
+          <select id="settingsLocale">
+            <option value="de">Deutsch</option>
+            <option value="en">English</option>
+          </select>
         </label>
         <p id="settingsError" class="form-error" hidden></p>
         <div class="modal-actions">
-          <button id="settingsCancelBtn" type="button">Abbrechen</button>
-          <button type="submit" class="primary">Speichern</button>
+          <button id="settingsCancelBtn" type="button" data-i18n="cancel">Abbrechen</button>
+          <button type="submit" class="primary" data-i18n="save">Speichern</button>
         </div>
       </form>
     </div>

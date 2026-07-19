@@ -11,6 +11,7 @@ require('dotenv').config({
     path: process.env.LOGA3_PORTABLE_ROOT
         ? path.join(process.env.LOGA3_PORTABLE_ROOT, '.env')
         : path.join(__dirname, '..', '.env'),
+    quiet: true,
 });
 
 const Loga3Complete = require('../src/loga3-complete.js');

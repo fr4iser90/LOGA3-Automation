@@ -10,6 +10,7 @@ require('dotenv').config({
     path: process.env.LOGA3_PORTABLE_ROOT
         ? path.join(process.env.LOGA3_PORTABLE_ROOT, '.env')
         : path.join(__dirname, '..', '.env'),
+    quiet: true,
 });
 
 const { scanYear, getAvailableYears, getDownloadsDir } = require('./loga3-inventory');
@@ -20,7 +21,9 @@ const {
     applySettingsToEnv,
 } = require('./loga3-settings');
 const { openPath, DEFAULT_CONVERTER_URL } = require('./loga3-cli-args');
+const { t, getMessages, setLocale } = require('./loga3-i18n');
 
+applySettingsToEnv(process.env);
 const PORT = Number(process.env.LOGA3_GUI_PORT) || 3847;
 const HOST = process.env.LOGA3_GUI_HOST || '127.0.0.1';
 const PROJECT_ROOT = path.join(__dirname, '..');
@@ -113,13 +116,13 @@ function buildTargets(body) {
 
 function startDownload(request) {
     if (jobRunning) {
-        return { ok: false, error: 'Ein Download läuft bereits.' };
+        return { ok: false, error: t('errJobRunning') };
     }
 
     if (!isConfigured()) {
         return {
             ok: false,
-            error: 'Bitte zuerst LOGA3-Zugangsdaten unter „Einstellungen“ speichern.',
+            error: t('errNeedSetup'),
             needsSetup: true,
         };
     }
@@ -127,15 +130,15 @@ function startDownload(request) {
     const { targets, monthLabels, year } = buildTargets(request);
 
     if (request.allMissing && targets.length === 0) {
-        return { ok: false, error: `Keine fehlenden Monate für ${year}.` };
+        return { ok: false, error: t('errNoMissingYear', { year }) };
     }
 
     if ((request.months?.length || request.allMissing) && targets.length === 0) {
-        return { ok: false, error: 'Keine Monate ausgewählt.' };
+        return { ok: false, error: t('errNoMonths') };
     }
 
     if (request.requireTargets && targets.length === 0) {
-        return { ok: false, error: 'Monatsliste konnte nicht erzeugt werden.' };
+        return { ok: false, error: t('errTargets') };
     }
 
     jobRunning = true;
@@ -151,13 +154,16 @@ function startDownload(request) {
         for (const target of targets) {
             args.push('--period', `${target.year}-${String(target.month).padStart(2, '0')}`);
         }
-        pushLog(`▶ Starting ${targets.length} month(s) for ${year}:`);
-        pushLog(`   ${monthLabels.join(' → ')}`);
+        pushLog(t('logQueue', {
+            count: targets.length,
+            year,
+            months: monthLabels.join(' → '),
+        }));
     } else {
-        pushLog('▶ Starting download for current LOGA3 month...');
+        pushLog(t('logCurrent'));
     }
 
-    pushLog('ℹ️  If 2FA is required: confirm in the browser window.');
+    pushLog(t('log2fa'));
 
     jobChild = spawn(process.execPath, args, {
         cwd: PROJECT_ROOT,
@@ -176,10 +182,10 @@ function startDownload(request) {
         jobChild = null;
 
         if (code === 0) {
-            pushLog('✅ All downloads complete. Refreshing inventory...');
+            pushLog(t('logDone'));
             broadcast('done', { ok: true, code });
         } else {
-            pushLog(`❌ Error (exit code ${code})`);
+            pushLog(t('logError', { code }));
             broadcast('done', { ok: false, code });
         }
 
@@ -194,7 +200,7 @@ function stopDownload() {
         return { ok: false, error: 'No job running.' };
     }
     jobChild.kill('SIGTERM');
-    pushLog('🛑 Job cancelled.');
+    pushLog(t('logCancelled'));
     return { ok: true };
 }
 
@@ -216,25 +222,35 @@ const server = http.createServer(async (req, res) => {
             sendJson(res, 200, {
                 running: jobRunning,
                 downloadsDir: getDownloadsDir(),
+                messages: getMessages(),
                 ...getPublicSettings(),
             });
             return;
         }
 
         if (url.pathname === '/api/settings' && req.method === 'GET') {
-            sendJson(res, 200, getPublicSettings());
+            sendJson(res, 200, {
+                messages: getMessages(),
+                ...getPublicSettings(),
+            });
             return;
         }
 
         if (url.pathname === '/api/settings' && req.method === 'POST') {
             const body = await readBody(req);
+            if (body.locale) setLocale(body.locale);
             const saved = saveSettings({
                 username: body.username,
                 password: body.password,
                 headless: body.headless,
+                locale: body.locale,
             });
-            pushLog(`✅ Zugangsdaten gespeichert (${saved.username}).`);
-            sendJson(res, 200, { ok: true, ...getPublicSettings() });
+            pushLog(t('logCredentialsSaved', { username: saved.username }));
+            sendJson(res, 200, {
+                ok: true,
+                messages: getMessages(),
+                ...getPublicSettings(),
+            });
             return;
         }
 

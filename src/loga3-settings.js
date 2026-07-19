@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { normalizeLocale, getLocale, setLocale, t } = require('./loga3-i18n');
 
 const PROJECT_ROOT = path.join(__dirname, '..');
 const SETTINGS_FILE = 'loga3-settings.json';
@@ -24,9 +25,10 @@ function loadSettings() {
             username: String(data.username || ''),
             password: String(data.password || ''),
             headless: data.headless === undefined ? null : Boolean(data.headless),
+            locale: normalizeLocale(data.locale) || null,
         };
     } catch {
-        return { username: '', password: '', headless: null };
+        return { username: '', password: '', headless: null, locale: null };
     }
 }
 
@@ -44,6 +46,9 @@ function saveSettings(patch = {}) {
         username: patch.username !== undefined ? String(patch.username).trim() : current.username,
         password: current.password,
         headless: patch.headless !== undefined ? Boolean(patch.headless) : current.headless,
+        locale: patch.locale !== undefined
+            ? (normalizeLocale(patch.locale) || current.locale || 'de')
+            : current.locale,
     };
 
     if (patch.password !== undefined && String(patch.password).length > 0) {
@@ -51,10 +56,17 @@ function saveSettings(patch = {}) {
     }
 
     if (!next.username) {
-        throw new Error('Benutzername fehlt.');
+        if (process.env.LOGA3_USERNAME) {
+            next.username = process.env.LOGA3_USERNAME;
+        } else {
+            throw new Error(t('errUsername'));
+        }
     }
     if (!next.password) {
-        throw new Error('Passwort fehlt.');
+        const envOk = Boolean(process.env.LOGA3_USERNAME && process.env.LOGA3_PASSWORD);
+        if (!envOk) {
+            throw new Error(t('errPassword'));
+        }
     }
 
     const dir = getSettingsDir();
@@ -68,10 +80,13 @@ function saveSettings(patch = {}) {
         // Windows may ignore mode
     }
 
+    if (next.locale) setLocale(next.locale);
+
     return {
         configured: true,
         username: next.username,
         headless: next.headless === null ? undefined : next.headless,
+        locale: next.locale || getLocale(),
         path: filePath,
     };
 }
@@ -79,12 +94,14 @@ function saveSettings(patch = {}) {
 function getPublicSettings() {
     const settings = loadSettings();
     const envConfigured = Boolean(process.env.LOGA3_USERNAME && process.env.LOGA3_PASSWORD);
+    const locale = getLocale();
     return {
         configured: isConfigured(settings),
         username: process.env.LOGA3_USERNAME || settings.username || '',
         headless: process.env.LOGA3_HEADLESS !== undefined
             ? (process.env.LOGA3_HEADLESS === '1' || process.env.LOGA3_HEADLESS === 'true')
             : (settings.headless === null ? undefined : settings.headless),
+        locale,
         source: envConfigured ? 'env' : (settings.username ? 'gui' : 'none'),
         settingsPath: getSettingsPath(),
     };
@@ -101,6 +118,11 @@ function applySettingsToEnv(env = process.env) {
     }
     if (env.LOGA3_HEADLESS === undefined && settings.headless !== null) {
         env.LOGA3_HEADLESS = settings.headless ? '1' : '0';
+    }
+    if (!env.LOGA3_LOCALE && settings.locale) {
+        env.LOGA3_LOCALE = settings.locale;
+    } else if (!env.LOGA3_LOCALE) {
+        env.LOGA3_LOCALE = 'de';
     }
     return env;
 }

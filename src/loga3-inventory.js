@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { monthLabels } = require('./loga3-i18n');
 
 /** Repo root (parent of src/) */
 const PROJECT_ROOT = path.join(__dirname, '..');
@@ -9,6 +10,7 @@ const MONTH_NAMES = [
     'juli', 'august', 'september', 'oktober', 'november', 'dezember'
 ];
 
+/** German labels for LOGA3 UI automation (must stay German). */
 const MONTH_LABELS = [
     'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
     'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'
@@ -63,11 +65,12 @@ function scanYear(downloadsDir, year) {
 
     const pdfFiles = files.filter((file) => file.toLowerCase().endsWith('.pdf'));
 
+    const labels = monthLabels();
     const months = MONTH_NAMES.map((monthName, index) => {
         const match = pdfFiles.find((file) => matchesMonthFile(file, monthName, year));
         return {
             month: index + 1,
-            label: MONTH_LABELS[index],
+            label: labels[index],
             key: `${monthName}_${year}`,
             present: Boolean(match),
             file: match || null,

@@ -321,7 +321,8 @@ button.danger {
 
 .modal-card input[type="text"],
 .modal-card input[type="password"],
-.modal-card input:not([type]) {
+.modal-card input:not([type]),
+.modal-card select {
   background: var(--bg);
   color: var(--text);
   border: 1px solid var(--border);

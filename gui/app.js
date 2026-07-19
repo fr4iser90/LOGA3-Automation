@@ -20,6 +20,7 @@ const settingsForm = document.getElementById('settingsForm');
 const settingsUsername = document.getElementById('settingsUsername');
 const settingsPassword = document.getElementById('settingsPassword');
 const settingsHeadless = document.getElementById('settingsHeadless');
+const settingsLocale = document.getElementById('settingsLocale');
 const settingsCancelBtn = document.getElementById('settingsCancelBtn');
 const settingsError = document.getElementById('settingsError');
 const passwordHint = document.getElementById('passwordHint');
@@ -28,7 +29,36 @@ const settingsTitle = document.getElementById('settingsTitle');
 let running = false;
 let configured = false;
 let inventoryData = null;
+let messages = {};
+let locale = 'de';
 const selectedMonths = new Set();
+
+function t(key, vars = {}) {
+  let text = messages[key] || key;
+  for (const [name, value] of Object.entries(vars)) {
+    text = text.replace(new RegExp(`\\{${name}\\}`, 'g'), String(value));
+  }
+  return text;
+}
+
+function applyStaticI18n() {
+  document.documentElement.lang = locale;
+  document.title = t('appTitle');
+  document.querySelectorAll('[data-i18n]').forEach((el) => {
+    el.textContent = t(el.getAttribute('data-i18n'));
+  });
+  document.querySelectorAll('[data-i18n-html]').forEach((el) => {
+    const key = el.getAttribute('data-i18n-html');
+    const raw = t(key);
+    // Keep ShiftPlanConverter emphasized when present in either language
+    el.innerHTML = raw.replace('ShiftPlanConverter', '<strong>ShiftPlanConverter</strong>');
+  });
+  if (settingsLocale) {
+    settingsLocale.options[0].textContent = t('langDe');
+    settingsLocale.options[1].textContent = t('langEn');
+  }
+  updateSelectionInfo();
+}
 
 function appendLog(line) {
   logOutput.textContent += `${line}\n`;
@@ -52,15 +82,19 @@ function updateSetupUi() {
 
 function updateSelectionInfo() {
   const count = selectedMonths.size;
-  selectionInfo.textContent = `${count} Monat${count === 1 ? '' : 'e'} ausgewählt`;
-  downloadSelectedBtn.textContent = count ? `Ausgewählte laden (${count})` : 'Ausgewählte laden';
+  selectionInfo.textContent = count === 1
+    ? t('selectedCount', { count })
+    : t('selectedCountPlural', { count });
+  downloadSelectedBtn.textContent = count
+    ? t('downloadSelectedN', { count })
+    : t('downloadSelected');
 }
 
 async function api(path, options) {
   const response = await fetch(path, options);
   const data = await response.json();
   if (!response.ok) {
-    const err = new Error(data.error || 'Anfrage fehlgeschlagen');
+    const err = new Error(data.error || t('errRequest'));
     err.needsSetup = Boolean(data.needsSetup);
     throw err;
   }
@@ -68,12 +102,12 @@ async function api(path, options) {
 }
 
 function openSettings({ required = false } = {}) {
-  settingsTitle.textContent = required ? 'Willkommen — Zugang einrichten' : 'Einstellungen';
+  settingsTitle.textContent = required ? t('settingsWelcome') : t('settingsTitle');
   settingsCancelBtn.hidden = required;
   passwordHint.hidden = !configured;
   settingsPassword.required = !configured;
   settingsPassword.value = '';
-  settingsPassword.placeholder = configured ? '•••••••• (leer = behalten)' : 'Passwort';
+  settingsPassword.placeholder = configured ? t('passwordKeep') : t('password');
   settingsError.hidden = true;
   settingsModal.hidden = false;
   settingsUsername.focus();
@@ -86,9 +120,13 @@ function closeSettings() {
 
 async function loadSettingsIntoForm() {
   const data = await api('/api/settings');
+  if (data.messages) messages = data.messages;
+  if (data.locale) locale = data.locale;
   configured = Boolean(data.configured);
   settingsUsername.value = data.username || '';
   settingsHeadless.checked = data.headless === true;
+  settingsLocale.value = locale;
+  applyStaticI18n();
   updateSetupUi();
   return data;
 }
@@ -130,9 +168,9 @@ function renderInventory(data) {
   inventoryData = data;
 
   summaryEl.innerHTML = `
-    <div class="stat"><strong>${data.presentCount}</strong><span>vorhanden</span></div>
-    <div class="stat"><strong>${data.missingCount}</strong><span>fehlen</span></div>
-    <div class="stat"><strong>12</strong><span>Monate gesamt</span></div>
+    <div class="stat"><strong>${data.presentCount}</strong><span>${t('presentCount')}</span></div>
+    <div class="stat"><strong>${data.missingCount}</strong><span>${t('missingCount')}</span></div>
+    <div class="stat"><strong>12</strong><span>${t('monthsTotal')}</span></div>
   `;
 
   monthsGrid.innerHTML = data.months.map((month) => {
@@ -143,7 +181,7 @@ function renderInventory(data) {
           <input type="checkbox" ${selected ? 'checked' : ''} ${running ? 'disabled' : ''}>
           <span>${month.label}</span>
         </label>
-        <span class="badge ${month.present ? 'ok' : 'no'}">${month.present ? 'vorhanden' : 'fehlt'}</span>
+        <span class="badge ${month.present ? 'ok' : 'no'}">${month.present ? t('present') : t('missing')}</span>
         ${month.file ? `<p class="file-name">${month.file}</p>` : ''}
       </article>
     `;
@@ -170,18 +208,15 @@ async function refreshInventory(preserveSelection = false) {
 async function startDownload(payload) {
   if (!configured) {
     openSettings({ required: true });
-    appendLog('⚠️ Bitte zuerst Zugangsdaten speichern.');
+    appendLog(`⚠️ ${t('errNeedCredentials')}`);
     return;
   }
   try {
-    const result = await api('/api/download', {
+    await api('/api/download', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-    if (result.targets?.length) {
-      appendLog(`▶ Warteschlange: ${result.targets.join(' → ')}`);
-    }
     setRunning(true);
   } catch (error) {
     if (error.needsSetup) openSettings({ required: true });
@@ -191,7 +226,7 @@ async function startDownload(payload) {
 
 function downloadSelected() {
   if (!selectedMonths.size) {
-    appendLog('⚠️ Bitte mindestens einen Monat auswählen.');
+    appendLog(`⚠️ ${t('errSelectMonth')}`);
     return;
   }
   startDownload({
@@ -203,7 +238,7 @@ function downloadSelected() {
 
 function downloadMissing() {
   if (!inventoryData) {
-    appendLog('⚠️ Inventar noch nicht geladen.');
+    appendLog(`⚠️ ${t('errInventory')}`);
     return;
   }
 
@@ -213,12 +248,9 @@ function downloadMissing() {
     .sort((a, b) => a - b);
 
   if (!months.length) {
-    appendLog(`ℹ️ Für ${yearSelect.value} fehlen keine Monate.`);
+    appendLog(`ℹ️ ${t('errNoMissing', { year: yearSelect.value })}`);
     return;
   }
-
-  const labels = months.map((month) => inventoryData.months[month - 1].label);
-  appendLog(`📋 Fehlende Monate (${months.length}): ${labels.join(' → ')}`);
 
   startDownload({
     year: Number(yearSelect.value),
@@ -267,7 +299,7 @@ function connectEvents() {
   });
 
   source.onerror = () => {
-    appendLog('⚠️ Verbindung zum Server unterbrochen, versuche erneut...');
+    appendLog(`⚠️ ${t('errReconnect')}`);
   };
 }
 
@@ -278,6 +310,7 @@ settingsForm.addEventListener('submit', async (event) => {
     const payload = {
       username: settingsUsername.value.trim(),
       headless: settingsHeadless.checked,
+      locale: settingsLocale.value,
     };
     if (settingsPassword.value) {
       payload.password = settingsPassword.value;
@@ -287,9 +320,13 @@ settingsForm.addEventListener('submit', async (event) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
+    if (result.messages) messages = result.messages;
+    if (result.locale) locale = result.locale;
     configured = Boolean(result.configured);
+    applyStaticI18n();
     updateSetupUi();
     settingsModal.hidden = true;
+    await refreshInventory(true);
   } catch (error) {
     settingsError.textContent = error.message;
     settingsError.hidden = false;
@@ -310,7 +347,7 @@ stopBtn.addEventListener('click', stopDownload);
 openDownloadsBtn.addEventListener('click', async () => {
   try {
     const result = await api('/api/open-downloads', { method: 'POST' });
-    appendLog(`📂 Ordner: ${result.path}`);
+    appendLog(t('logFolder', { path: result.path }));
   } catch (error) {
     appendLog(`❌ ${error.message}`);
   }
@@ -318,7 +355,7 @@ openDownloadsBtn.addEventListener('click', async () => {
 openConverterBtn.addEventListener('click', async () => {
   try {
     const result = await api('/api/open-converter', { method: 'POST' });
-    appendLog(`🌐 Converter: ${result.url}`);
+    appendLog(t('logConverter', { url: result.url }));
   } catch (error) {
     appendLog(`❌ ${error.message}`);
   }
@@ -326,7 +363,10 @@ openConverterBtn.addEventListener('click', async () => {
 
 async function init() {
   const status = await api('/api/status');
+  if (status.messages) messages = status.messages;
+  if (status.locale) locale = status.locale;
   configured = Boolean(status.configured);
+  applyStaticI18n();
   setRunning(status.running);
   updateSelectionInfo();
   updateSetupUi();
@@ -339,4 +379,4 @@ async function init() {
   }
 }
 
-init().catch((error) => appendLog(`❌ Startfehler: ${error.message}`));
+init().catch((error) => appendLog(`❌ ${t('errStart', { message: error.message })}`));

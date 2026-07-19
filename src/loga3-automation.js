@@ -6,10 +6,14 @@ const fs = require('fs');
 const { getDownloadsDir, getLogsDir, resolveHeadless } = require('./loga3-inventory');
 const { applySettingsToEnv } = require('./loga3-settings');
 
+const { debugLog, userT, userErrorT } = require('./loga3-log');
+const { t } = require('./loga3-i18n');
+
 require('dotenv').config({
     path: process.env.LOGA3_PORTABLE_ROOT
         ? path.join(process.env.LOGA3_PORTABLE_ROOT, '.env')
         : path.join(__dirname, '..', '.env'),
+    quiet: true,
 });
 applySettingsToEnv(process.env);
 
@@ -18,7 +22,7 @@ let config = {};
 try {
     config = require(path.join(__dirname, '..', 'loga3-config.js'));
 } catch (error) {
-    console.log('ℹ️  No loga3-config.js — using GUI settings / .env / environment variables');
+    debugLog('ℹ️  No loga3-config.js — using GUI settings / .env / environment variables');
 }
 
 /**
@@ -39,7 +43,7 @@ class Loga3Automation {
     }
 
     async init() {
-        console.log('🚀 Starting LOGA3 automation...');
+        debugLog('🚀 Starting LOGA3 automation...');
         
         // Launch browser based on config
         const browserType = this.browserConfig.type || 'chromium';
@@ -60,7 +64,7 @@ class Loga3Automation {
         if (!fs.existsSync(this.downloadsDir)) {
             fs.mkdirSync(this.downloadsDir, { recursive: true });
         }
-        console.log(`📁 Downloads folder: ${this.downloadsDir}`);
+        debugLog(`📁 Downloads folder: ${this.downloadsDir}`);
 
         const context = await this.browser.newContext({
             viewport: { width: 1280, height: 720 },
@@ -78,7 +82,7 @@ class Loga3Automation {
     }
 
     async navigateToLogin() {
-        console.log('📡 Navigating to LOGA3 login page...');
+        debugLog('📡 Navigating to LOGA3 login page...');
         
         try {
             await this.page.goto(this.baseUrl, { 
@@ -92,7 +96,7 @@ class Loga3Automation {
             );
             await this.page.waitForTimeout(this.uiDelay);
             
-            console.log('✅ Successfully loaded LOGA3 login page');
+            debugLog('✅ Successfully loaded LOGA3 login page');
             return true;
         } catch (error) {
             console.error('❌ Failed to navigate to login page:', error.message);
@@ -101,7 +105,7 @@ class Loga3Automation {
     }
 
     async performLogin(username, password) {
-        console.log('🔐 Attempting to login...');
+        debugLog('🔐 Attempting to login...');
         
         try {
             // Wait for login form to be visible
@@ -156,22 +160,22 @@ class Loga3Automation {
             // Clear and fill username
             await usernameField.click({ clickCount: 3 });
             await usernameField.fill(username);
-            console.log('✅ Username entered');
+            debugLog('✅ Username entered');
             
             // Clear and fill password
             await passwordField.click({ clickCount: 3 });
             await passwordField.fill(password);
-            console.log('✅ Password entered');
+            debugLog('✅ Password entered');
             
             // Try pressing Enter first (faster alternative)
             await passwordField.press('Enter');
-            console.log('✅ Enter pressed');
+            debugLog('✅ Enter pressed');
             
             // Wait a moment to see if login worked
             await this.page.waitForTimeout(this.stepDelay);
             const currentUrl = this.page.url();
             if (currentUrl.includes('login') || currentUrl.includes('#')) {
-                console.log('🔄 Still on login page, trying button click...');
+                debugLog('🔄 Still on login page, trying button click...');
                 
                 // Look for login button
                 const loginButtonSelectors = [
@@ -195,9 +199,9 @@ class Loga3Automation {
                 
                 if (loginButton) {
                     await loginButton.click();
-                    console.log('✅ Login button clicked');
+                    debugLog('✅ Login button clicked');
                 } else {
-                    console.log('⚠️  No login button found, but Enter was pressed');
+                    debugLog('⚠️  No login button found, but Enter was pressed');
                 }
             }
             
@@ -217,11 +221,11 @@ class Loga3Automation {
             );
             
             if (hasError) {
-                console.log('⚠️  Login may have failed - error message detected');
+                debugLog('⚠️  Login may have failed - error message detected');
                 return false;
             }
             
-            console.log('✅ Login attempt completed');
+            debugLog('✅ Login attempt completed');
             return true;
             
         } catch (error) {
@@ -231,7 +235,7 @@ class Loga3Automation {
     }
 
     async handle2FA() {
-        console.log('🔐 Checking for 2FA requirement...');
+        debugLog('🔐 Checking for 2FA requirement...');
         
         try {
             // Wait a bit to see if 2FA page loads
@@ -242,11 +246,8 @@ class Loga3Automation {
                           pageContent.includes('Authenticator');
             
             if (has2FA) {
-                console.log('🔐 2FA detected - manual intervention required');
-                console.log('📱 Please complete 2FA manually in the browser');
-                
-                // Wait for user to complete 2FA (up to 5 minutes)
-                console.log('⏳ Waiting for 2FA completion...');
+                userT('auto2fa');
+                userT('auto2faWait');
                 await this.page.waitForTimeout(300000); // 5 minutes
                 
                 return true;
@@ -254,7 +255,7 @@ class Loga3Automation {
             
             return false;
         } catch (error) {
-            console.log('ℹ️  No 2FA detected or error occurred:', error.message);
+            debugLog('ℹ️  No 2FA detected or error occurred:', error.message);
             return false;
         }
     }
@@ -268,7 +269,7 @@ class Loga3Automation {
             const screenshotDir = this.screenshotConfig.directory || getLogsDir();
             const screenshotPath = path.join(screenshotDir, filename);
             await this.page.screenshot({ path: screenshotPath, fullPage: true });
-            console.log(`📸 Screenshot saved: ${screenshotPath}`);
+            debugLog(`📸 Screenshot saved: ${screenshotPath}`);
         } catch (error) {
             console.error('❌ Failed to take screenshot:', error.message);
         }
@@ -277,7 +278,7 @@ class Loga3Automation {
     async cleanup() {
         if (this.browser) {
             await this.browser.close();
-            console.log('🧹 Browser closed');
+            userT('autoBrowserClosed');
         }
     }
 
@@ -295,7 +296,7 @@ class Loga3Automation {
             const password = process.env.LOGA3_PASSWORD || config.password;
 
             if (!username || !password) {
-                throw new Error('Keine Zugangsdaten — in der GUI unter Einstellungen speichern (oder .env / loga3-config.js).');
+                throw new Error(t('autoNoCredentials'));
             }
             
             const loginSuccess = await this.performLogin(username, password);
@@ -304,11 +305,8 @@ class Loga3Automation {
                 await this.handle2FA();
                 await this.takeScreenshot('loga3-after-login.png');
                 
-                console.log('🎉 Login process completed successfully!');
-                console.log('⏸️  Browser will remain open for manual interaction');
-                
-                // Keep browser open for manual interaction
-                console.log('Press Ctrl+C to close the browser');
+                userT('autoLoginOk');
+                debugLog('Browser will remain open for manual interaction (Ctrl+C to close)');
                 await new Promise(() => {}); // Keep script running
             } else {
                 await this.takeScreenshot('loga3-login-failed.png');
@@ -316,7 +314,7 @@ class Loga3Automation {
             }
             
         } catch (error) {
-            console.error('❌ Automation failed:', error.message);
+            userErrorT('autoFailed', { message: error.message });
             await this.takeScreenshot('loga3-error.png');
             process.exit(1);
         }
@@ -329,11 +327,11 @@ if (require.main === module) {
     
     // Handle graceful shutdown
     process.on('SIGINT', async () => {
-        console.log('\n🛑 Shutting down...');
+        userT('autoShutdown');
         await automation.cleanup();
         process.exit(0);
     });
-    
+
     automation.run().catch(console.error);
 }
 
