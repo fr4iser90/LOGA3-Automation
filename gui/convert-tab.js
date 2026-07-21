@@ -5,6 +5,7 @@ import {
     loadHospitalConfig,
     loadMapping,
     loadHospitalParser,
+    listHospitals,
 } from '/converter/src/shiftTypesLoader.js';
 import { extractTextFromPdfBuffer } from '/converter/src/pdfText.js';
 import { parseTimeSheet } from '/converter/src/convert.js';
@@ -14,14 +15,28 @@ import {
     extractMonthSummariesFromText,
     isMonthSummaryEnabled,
 } from '/converter/src/monthSummary.js';
+import { buildSupportParserSample, scorePdfForSupportSample } from '/converter/src/anonymize.js';
+import {
+    sendSupportRequest,
+    buildSupportReport,
+    downloadSupportReport,
+    loadMaintainerEmail,
+    truncateForMailto,
+} from '/converter/src/api.js';
 
 const HOSPITAL_DEFAULT = 'st-elisabeth-leipzig';
 const PREF_SHOW = 'prefShowMonthSummary';
 const PREF_RICH = 'prefRichEventDetails';
+const SUPPORT_SAMPLE_KEY = 'supportAnonymizedSample';
+const SUPPORT_SAMPLE_LS_KEY = 'supportAnonymizedSample';
+/** 1 PDF-Ausschnitt — soll mit Meta in mailto passen */
+const SUPPORT_SAMPLE_MAX_CHARS = 700;
+const SUPPORT_SAMPLE_PDF_COUNT = 1;
 const BUILTIN_GOOGLE_CLIENT_ID =
     '443643010945-l4r4n5t6vaj93tcqs8jlbvccltd06kaf.apps.googleusercontent.com';
 
 const els = {
+    hospital: document.getElementById('settingsHospital'),
     group: document.getElementById('settingsGroup'),
     area: document.getElementById('settingsArea'),
     preset: document.getElementById('settingsPreset'),
@@ -36,11 +51,26 @@ const els = {
     previewContent: document.getElementById('previewContent'),
     missingContainer: document.getElementById('missingShiftsContainer'),
     missingList: document.getElementById('missingShiftsList'),
+    saveUserMappingBtn: document.getElementById('saveUserMappingBtn'),
+    resetUserMappingBtn: document.getElementById('resetUserMappingBtn'),
+    userMappingStatus: document.getElementById('userMappingStatus'),
     monthSummaryCard: document.getElementById('monthSummaryCard'),
     icsExportBtn: document.getElementById('icsExportBtn'),
     refreshPdfsBtn: document.getElementById('refreshPdfsBtn'),
     selectAllPdfsBtn: document.getElementById('selectAllPdfsBtn'),
     editMappingBtn: document.getElementById('editMappingBtn'),
+    supportHospital: document.getElementById('supportHospital'),
+    supportGroup: document.getElementById('supportGroup'),
+    supportArea: document.getElementById('supportArea'),
+    supportNote: document.getElementById('supportNote'),
+    supportIncludeSample: document.getElementById('supportIncludeSample'),
+    supportSampleHint: document.getElementById('supportSampleHint'),
+    supportSendBtn: document.getElementById('supportSendBtn'),
+    supportDownloadBtn: document.getElementById('supportDownloadBtn'),
+    supportStatus: document.getElementById('supportStatus'),
+    packInstallInput: document.getElementById('packInstallInput'),
+    packsList: document.getElementById('packsList'),
+    packsStatus: document.getElementById('packsStatus'),
 };
 
 let hospitalConfig = null;
@@ -58,16 +88,318 @@ let convertPrefs = {
 let ready = false;
 let suppressMappingEvents = false;
 
-function setStatus(text, { error = false } = {}) {
-    if (!els.convertStatus) return;
+function ti(key, vars = {}) {
+    if (typeof window.t === 'function') return window.t(key, vars);
+    return key;
+}
+
+function setSupportStatus(text, { error = false } = {}) {
+    if (!els.supportStatus) return;
     if (!text) {
-        els.convertStatus.hidden = true;
-        els.convertStatus.textContent = '';
+        els.supportStatus.hidden = true;
+        els.supportStatus.textContent = '';
         return;
     }
-    els.convertStatus.hidden = false;
-    els.convertStatus.textContent = text;
-    els.convertStatus.classList.toggle('error', error);
+    els.supportStatus.hidden = false;
+    els.supportStatus.textContent = text;
+    els.supportStatus.classList.toggle('error', error);
+}
+
+function updateSupportSampleHint() {
+    if (!els.supportSampleHint) return;
+    const data = readStoredSupportSample();
+    if (!data?.text) {
+        els.supportSampleHint.textContent = ti('supportSampleHintEmpty');
+        return;
+    }
+    els.supportSampleHint.textContent = ti('supportSampleHintReady', {
+        chars: data.chars || data.text.length,
+        files: data.files || 1,
+    });
+}
+
+function fillSupportFormDefaults() {
+    if (els.supportHospital && !els.supportHospital.value) {
+        els.supportHospital.value = hospitalConfig?.name || 'St. Elisabeth Leipzig';
+    }
+    const group = hospitalConfig?.groups?.find((g) => g.id === convertPrefs.group);
+    const area = group?.areas?.find((a) => a.id === convertPrefs.area);
+    if (els.supportGroup) els.supportGroup.value = group?.label || convertPrefs.group || '';
+    if (els.supportArea) els.supportArea.value = area?.label || convertPrefs.area || '';
+}
+
+function collectMissingShiftsText() {
+    if (!els.missingList) return '';
+    const ranges = new Set();
+    els.missingList.querySelectorAll('[data-range], .badge.warn').forEach((el) => {
+        const r = el.dataset?.range || el.textContent.trim();
+        if (r) ranges.add(r);
+    });
+    if (!ranges.size) return '';
+    return [...ranges].map((b) => `- ${b}`).join('\n');
+}
+
+async function saveUserMappingFromForm() {
+    const inputs = [...(els.missingList?.querySelectorAll('input.missing-code') || [])];
+    const preset = convertPrefs.preset || els.preset?.value || 'default';
+    const shifts = {};
+    for (const input of inputs) {
+        const code = input.value.trim();
+        const range = input.dataset.range;
+        if (code && range) {
+            shifts[range] = { code, isValidated: true };
+        }
+    }
+    if (!Object.keys(shifts).length) {
+        setUserMappingStatus(ti('userMappingNeedCodes'), { error: true });
+        return;
+    }
+    const hospital = convertPrefs.hospital || HOSPITAL_DEFAULT;
+    const group = els.group?.value || convertPrefs.group;
+    const area = els.area?.value || convertPrefs.area;
+    try {
+        await api('/api/user-mapping', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                hospital,
+                group,
+                area,
+                presets: { [preset]: shifts },
+            }),
+        });
+        setUserMappingStatus(ti('userMappingSaved'), { error: false });
+        await loadCurrentMapping();
+        await convertAllPdfs();
+    } catch (e) {
+        setUserMappingStatus(e.message || String(e), { error: true });
+    }
+}
+
+async function resetUserMapping() {
+    const hospital = convertPrefs.hospital || HOSPITAL_DEFAULT;
+    const group = els.group?.value || convertPrefs.group;
+    const area = els.area?.value || convertPrefs.area;
+    try {
+        const q = new URLSearchParams({ hospital, group, area });
+        await api(`/api/user-mapping?${q}`, { method: 'DELETE' });
+        setUserMappingStatus(ti('userMappingResetOk'), { error: false });
+        await loadCurrentMapping();
+        const names = selectedPdfNames();
+        if (names.length) await runConvert(names);
+        else {
+            try {
+                const entries = JSON.parse(localStorage.getItem('parsedEntries') || '[]');
+                renderPreview(entries);
+            } catch { /* ignore */ }
+        }
+    } catch (e) {
+        setUserMappingStatus(e.message || String(e), { error: true });
+    }
+}
+
+async function refreshPacksList() {
+    if (!els.packsList) return;
+    try {
+        const data = await api('/api/packs');
+        const packs = data.packs || [];
+        if (!packs.length) {
+            els.packsList.innerHTML = `<p class="field-hint">${escapeHtml(ti('packsEmpty'))}</p>`;
+            return;
+        }
+        els.packsList.innerHTML = packs.map((p) => `
+          <div class="pack-row" data-id="${escapeHtml(p.id)}">
+            <span><strong>${escapeHtml(p.name)}</strong> <code>${escapeHtml(p.id)}</code></span>
+            <button type="button" class="pack-remove" data-id="${escapeHtml(p.id)}">${escapeHtml(ti('packsRemove'))}</button>
+          </div>`).join('');
+        els.packsList.querySelectorAll('.pack-remove').forEach((btn) => {
+            btn.addEventListener('click', async () => {
+                const id = btn.dataset.id;
+                try {
+                    await api(`/api/packs/${encodeURIComponent(id)}`, { method: 'DELETE' });
+                    if (els.packsStatus) els.packsStatus.textContent = ti('packsRemoved', { id });
+                    await fillHospitals();
+                    await refreshPacksList();
+                    if (convertPrefs.hospital === id) {
+                        await switchHospital(HOSPITAL_DEFAULT);
+                    }
+                } catch (e) {
+                    if (els.packsStatus) els.packsStatus.textContent = ti('packsError', { message: e.message });
+                }
+            });
+        });
+    } catch (e) {
+        if (els.packsStatus) els.packsStatus.textContent = ti('packsError', { message: e.message });
+    }
+}
+
+async function installPackFile(file) {
+    if (!file) return;
+    if (els.packsStatus) els.packsStatus.textContent = '…';
+    try {
+        const buf = await file.arrayBuffer();
+        const response = await fetch('/api/packs/install', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/zip' },
+            body: buf,
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Install fehlgeschlagen');
+        if (els.packsStatus) els.packsStatus.textContent = ti('packsInstalled', { name: data.name || data.id });
+        await fillHospitals();
+        await refreshPacksList();
+        if (data.id && els.hospital) {
+            els.hospital.value = data.id;
+            await switchHospital(data.id);
+        }
+    } catch (e) {
+        if (els.packsStatus) els.packsStatus.textContent = ti('packsError', { message: e.message || e });
+    }
+}
+
+function readStoredSupportSample() {
+    for (const store of [sessionStorage, localStorage]) {
+        try {
+            const raw = store.getItem(SUPPORT_SAMPLE_KEY);
+            if (!raw) continue;
+            const data = JSON.parse(raw);
+            if (data?.text) return data;
+        } catch {
+            // continue
+        }
+    }
+    return null;
+}
+
+function writeStoredSupportSample(sampleText, files) {
+    const payload = JSON.stringify({
+        text: sampleText,
+        chars: sampleText.length,
+        files,
+        at: Date.now(),
+    });
+    try { sessionStorage.setItem(SUPPORT_SAMPLE_KEY, payload); } catch { /* ignore */ }
+    try { localStorage.setItem(SUPPORT_SAMPLE_LS_KEY, payload); } catch { /* ignore */ }
+}
+
+/**
+ * Rohtext für Support: PDF mit echten Schichtzeiten bevorzugen, Ausschnitt smart wählen.
+ * @param {{ force?: boolean }} [opts]
+ */
+async function ensureSupportRawSample({ force = false } = {}) {
+    if (!force) {
+        const existing = readStoredSupportSample();
+        if (existing?.text && /KO\*|GE\*/.test(existing.text)) {
+            const trimmed = truncateForMailto(existing.text, SUPPORT_SAMPLE_MAX_CHARS);
+            return trimmed;
+        }
+    }
+
+    if (!window.pdfjsLib) {
+        setupPdfJs();
+    }
+    if (!window.pdfjsLib) return '';
+
+    let names = selectedPdfNames();
+    if (!names.length) {
+        try {
+            const { files } = await api('/api/downloads');
+            names = (files || []).map((f) => f.name);
+        } catch {
+            names = [];
+        }
+    }
+    // Bis zu 8 PDFs scoren, das mit den meisten KO*/GE* nehmen
+    names = names.slice(0, 8);
+    if (!names.length) return '';
+
+    let best = { score: -1, name: '', text: '' };
+    for (const name of names) {
+        try {
+            const response = await fetch(`/api/downloads/file?name=${encodeURIComponent(name)}`);
+            if (!response.ok) continue;
+            const buffer = await response.arrayBuffer();
+            const text = await extractTextFromPdfBuffer(buffer);
+            if (!text.trim()) continue;
+            const score = scorePdfForSupportSample(text);
+            if (score > best.score) {
+                best = { score, name, text };
+            }
+            // Schon gute Treffer → früh abbrechen
+            if (score >= 20) break;
+        } catch (e) {
+            console.warn('Support-Sample PDF', name, e);
+        }
+    }
+    if (!best.text) return '';
+
+    const sampleText = buildSupportParserSample(best.text, {
+        maxChars: SUPPORT_SAMPLE_MAX_CHARS,
+        fileLabel: best.name,
+    });
+    writeStoredSupportSample(sampleText, 1);
+    updateSupportSampleHint();
+    return sampleText;
+}
+
+async function buildSupportPayload() {
+    const includeSample = !els.supportIncludeSample || els.supportIncludeSample.checked;
+    let anonymizedSample = '';
+    if (includeSample) {
+        // Immer frisch/kurz — alter Cache mit 2×6000 Zeichen würde mailto sprengen
+        anonymizedSample = await ensureSupportRawSample({ force: true });
+    }
+    return {
+        hospitalName: (els.supportHospital?.value || '').trim(),
+        groupLabel: (els.supportGroup?.value || '').trim(),
+        areaLabel: (els.supportArea?.value || '').trim(),
+        preset: convertPrefs.preset || els.preset?.value || '',
+        note: (els.supportNote?.value || '').trim(),
+        missingShifts: collectMissingShiftsText(),
+        anonymizedSample,
+    };
+}
+
+async function handleSupportSend() {
+    setSupportStatus('…', { error: false });
+    const payload = await buildSupportPayload();
+    if (!payload.hospitalName) {
+        setSupportStatus(ti('supportNeedHospital'), { error: true });
+        return;
+    }
+    if (els.supportIncludeSample?.checked && !payload.anonymizedSample) {
+        setSupportStatus(ti('supportSampleHintEmpty'), { error: true });
+        return;
+    }
+    try {
+        const email = await loadMaintainerEmail();
+        const result = await sendSupportRequest({ maintainerEmail: email, ...payload });
+        setSupportStatus(
+            result.mode === 'file'
+                ? ti('supportFileOk', { filename: result.filename || 'loga3-support.txt' })
+                : ti('supportMailOk'),
+            { error: false }
+        );
+    } catch (e) {
+        setSupportStatus(ti('supportError', { message: e.message || e }), { error: true });
+    }
+}
+
+async function handleSupportDownload() {
+    setSupportStatus('…', { error: false });
+    const payload = await buildSupportPayload();
+    if (!payload.hospitalName) {
+        setSupportStatus(ti('supportNeedHospital'), { error: true });
+        return;
+    }
+    try {
+        const { fullBody } = buildSupportReport(payload);
+        const slug = payload.hospitalName.replace(/\s+/g, '-').toLowerCase().replace(/[^a-z0-9\-äöüß]/gi, '');
+        downloadSupportReport(`loga3-support-${slug || 'anfrage'}.txt`, fullBody);
+        setSupportStatus(ti('supportDownloadOk'), { error: false });
+    } catch (e) {
+        setSupportStatus(ti('supportError', { message: e.message || e }), { error: true });
+    }
 }
 
 function escapeHtml(str) {
@@ -101,11 +433,24 @@ function syncLocalPrefsFromForm() {
     localStorage.setItem('googleClientId', BUILTIN_GOOGLE_CLIENT_ID);
 }
 
+function setUserMappingStatus(text, { error = false } = {}) {
+    if (!els.userMappingStatus) return;
+    if (!text) {
+        els.userMappingStatus.hidden = true;
+        els.userMappingStatus.textContent = '';
+        return;
+    }
+    els.userMappingStatus.hidden = false;
+    els.userMappingStatus.textContent = text;
+    els.userMappingStatus.classList.toggle('error', error);
+}
+
 function updateMappingSummary() {
     if (!els.mappingSummary || !hospitalConfig) return;
     const group = hospitalConfig.groups.find((g) => g.id === convertPrefs.group);
     const area = group?.areas?.find((a) => a.id === convertPrefs.area);
     const parts = [
+        hospitalConfig.name || convertPrefs.hospital,
         group?.label || convertPrefs.group,
         area?.label || convertPrefs.area,
         convertPrefs.preset || '—',
@@ -113,7 +458,40 @@ function updateMappingSummary() {
     els.mappingSummary.textContent = parts.join(' · ');
 }
 
-function fillGroups() {
+async function fillHospitals() {
+    if (!els.hospital) return;
+    let hospitals = [];
+    try {
+        hospitals = await listHospitals();
+    } catch {
+        hospitals = [{ id: HOSPITAL_DEFAULT, name: 'St. Elisabeth Leipzig', source: 'builtin' }];
+    }
+    suppressMappingEvents = true;
+    els.hospital.innerHTML = hospitals
+        .map((h) => {
+            const tag = h.source === 'pack' ? ' (Pack)' : '';
+            return `<option value="${escapeHtml(h.id)}">${escapeHtml(h.name)}${tag}</option>`;
+        })
+        .join('');
+    if (convertPrefs.hospital) els.hospital.value = convertPrefs.hospital;
+    if (![...els.hospital.options].some((o) => o.value === els.hospital.value) && els.hospital.options[0]) {
+        els.hospital.selectedIndex = 0;
+        convertPrefs.hospital = els.hospital.value;
+    }
+    suppressMappingEvents = false;
+}
+
+async function switchHospital(hospitalId) {
+    convertPrefs.hospital = hospitalId || HOSPITAL_DEFAULT;
+    hospitalConfig = await loadHospitalConfig(convertPrefs.hospital);
+    currentParser = await loadHospitalParser(convertPrefs.hospital);
+    if (!currentParser) {
+        setStatus(ti('packsError', { message: `Kein Parser für ${convertPrefs.hospital}` }), { error: true });
+    }
+    await fillGroups();
+}
+
+async function fillGroups() {
     if (!hospitalConfig || !els.group) return;
     suppressMappingEvents = true;
     els.group.innerHTML = hospitalConfig.groups
@@ -124,10 +502,10 @@ function fillGroups() {
         els.group.selectedIndex = 0;
     }
     suppressMappingEvents = false;
-    fillAreas();
+    await fillAreas();
 }
 
-function fillAreas() {
+async function fillAreas() {
     if (!hospitalConfig || !els.area) return;
     const groupId = els.group?.value || convertPrefs.group;
     const group = hospitalConfig.groups.find((g) => g.id === groupId);
@@ -140,7 +518,7 @@ function fillAreas() {
         els.area.selectedIndex = 0;
     }
     suppressMappingEvents = false;
-    return loadCurrentMapping();
+    await loadCurrentMapping();
 }
 
 async function loadCurrentMapping() {
@@ -152,7 +530,9 @@ async function loadCurrentMapping() {
         return;
     }
     const hospital = convertPrefs.hospital || HOSPITAL_DEFAULT;
-    currentMapping = await loadMapping(hospital, mappingPath);
+    const group = els.group?.value || convertPrefs.group;
+    const area = els.area?.value || convertPrefs.area;
+    currentMapping = await loadMapping(hospital, mappingPath, { group, area });
     if (currentMapping.colors) {
         localStorage.setItem('shiftColors', JSON.stringify(currentMapping.colors));
     }
@@ -175,7 +555,7 @@ async function loadCurrentMapping() {
 
 function readConvertFromForm() {
     return {
-        hospital: convertPrefs.hospital || HOSPITAL_DEFAULT,
+        hospital: els.hospital?.value || convertPrefs.hospital || HOSPITAL_DEFAULT,
         group: els.group?.value || convertPrefs.group,
         area: els.area?.value || convertPrefs.area,
         preset: els.preset?.value || convertPrefs.preset,
@@ -185,7 +565,7 @@ function readConvertFromForm() {
     };
 }
 
-function applyConvertPrefsToForm(prefs) {
+async function applyConvertPrefsToForm(prefs) {
     convertPrefs = {
         ...convertPrefs,
         ...prefs,
@@ -194,7 +574,9 @@ function applyConvertPrefsToForm(prefs) {
     if (els.showSummary) els.showSummary.checked = convertPrefs.showMonthSummary !== false;
     if (els.richDetails) els.richDetails.checked = Boolean(convertPrefs.richEventDetails);
     syncLocalPrefsFromForm();
-    return fillGroups();
+    await fillHospitals();
+    if (els.hospital) els.hospital.value = convertPrefs.hospital || HOSPITAL_DEFAULT;
+    await switchHospital(convertPrefs.hospital || HOSPITAL_DEFAULT);
 }
 
 async function refreshPdfList() {
@@ -236,7 +618,12 @@ function renderPreview(entries) {
     if (missing.size) {
         els.missingContainer.hidden = false;
         els.missingList.innerHTML = [...missing]
-            .map((s) => `<span class="badge warn">${escapeHtml(s)}</span>`)
+            .map((range) => `
+              <label class="missing-row">
+                <span class="badge warn">${escapeHtml(range)}</span>
+                <input type="text" class="missing-code" data-range="${escapeHtml(range)}"
+                  placeholder="Code" maxlength="16" aria-label="Code für ${escapeHtml(range)}">
+              </label>`)
             .join('');
     } else {
         els.missingContainer.hidden = true;
@@ -411,6 +798,7 @@ async function runConvert(namesOverride = null) {
     const allEntries = [];
     const allSummaries = [];
     const failed = [];
+    const anonymizedParts = [];
     const { group, area, preset } = convertPrefs;
 
     for (let i = 0; i < names.length; i++) {
@@ -424,6 +812,14 @@ async function runConvert(namesOverride = null) {
             if (!text.trim()) {
                 failed.push(`${name}: kein lesbarer Text`);
                 continue;
+            }
+            if (anonymizedParts.length < SUPPORT_SAMPLE_PDF_COUNT) {
+                anonymizedParts.push(
+                    buildSupportParserSample(text, {
+                        maxChars: SUPPORT_SAMPLE_MAX_CHARS,
+                        fileLabel: name,
+                    })
+                );
             }
             const summaries = extractMonthSummariesFromText(text);
             if (summaries?.length) allSummaries.push(...summaries);
@@ -446,6 +842,13 @@ async function runConvert(namesOverride = null) {
             failed.push(`${name}: ${err.message || err}`);
         }
     }
+
+    if (anonymizedParts.length) {
+        const sampleText = anonymizedParts.join('\n\n');
+        writeStoredSupportSample(sampleText, anonymizedParts.length);
+    }
+    updateSupportSampleHint();
+    fillSupportFormDefaults();
 
     allEntries.sort((a, b) => String(a.date).localeCompare(String(b.date)));
     localStorage.setItem('parsedEntries', JSON.stringify(allEntries));
@@ -510,33 +913,36 @@ export async function initConvertTab() {
     setupPdfJs();
     initGoogleCalendar();
 
-    const hospital = convertPrefs.hospital || HOSPITAL_DEFAULT;
-    hospitalConfig = await loadHospitalConfig(hospital);
-    currentParser = await loadHospitalParser(hospital);
-    if (!currentParser) {
-        setStatus('Parser für St. Elisabeth nicht geladen.', { error: true });
-    }
-
     try {
         const data = await api('/api/settings');
         if (data.convert) {
             await applyConvertPrefsToForm(data.convert);
         } else {
-            fillGroups();
+            await fillHospitals();
+            await switchHospital(convertPrefs.hospital || HOSPITAL_DEFAULT);
         }
     } catch {
-        fillGroups();
+        await fillHospitals();
+        await switchHospital(convertPrefs.hospital || HOSPITAL_DEFAULT);
     }
 
+    els.hospital?.addEventListener('change', async () => {
+        if (suppressMappingEvents) return;
+        try {
+            await switchHospital(els.hospital.value);
+        } catch (e) {
+            setStatus(e.message, { error: true });
+        }
+    });
     els.group?.addEventListener('change', () => {
         if (suppressMappingEvents) return;
         convertPrefs.group = els.group.value;
-        fillAreas();
+        fillAreas().catch((e) => setStatus(e.message, { error: true }));
     });
     els.area?.addEventListener('change', () => {
         if (suppressMappingEvents) return;
         convertPrefs.area = els.area.value;
-        loadCurrentMapping();
+        loadCurrentMapping().catch((e) => setStatus(e.message, { error: true }));
     });
     els.preset?.addEventListener('change', () => {
         if (suppressMappingEvents) return;
@@ -554,9 +960,21 @@ export async function initConvertTab() {
     els.editMappingBtn?.addEventListener('click', () => {
         document.getElementById('settingsBtn')?.click();
     });
+    els.supportSendBtn?.addEventListener('click', () => handleSupportSend());
+    els.supportDownloadBtn?.addEventListener('click', () => handleSupportDownload());
+    els.saveUserMappingBtn?.addEventListener('click', () => saveUserMappingFromForm());
+    els.resetUserMappingBtn?.addEventListener('click', () => resetUserMapping());
+    els.packInstallInput?.addEventListener('change', async () => {
+        const file = els.packInstallInput.files?.[0];
+        await installPackFile(file);
+        els.packInstallInput.value = '';
+    });
 
     await refreshPdfList();
+    await refreshPacksList();
     ready = true;
+    fillSupportFormDefaults();
+    updateSupportSampleHint();
 
     try {
         const entries = JSON.parse(localStorage.getItem('parsedEntries') || '[]');

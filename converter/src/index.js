@@ -20,9 +20,12 @@ export {
     loadMapping,
     loadHospitalParser,
     loadSpecialShiftTypes,
+    listHospitals,
+    mergeMappingClient,
 } from './shiftTypesLoader.js';
 export { extractTextFromPdfBuffer } from './pdfText.js';
 export { initPDFLoad } from './pdfLoader.js';
 export { renderPreview } from './preview.js';
 export { initGoogleCalendar, syncToCalendar } from './google.js';
-export { sendStructureFeedback, sendMappingProposal } from './api.js';
+export { sendStructureFeedback, sendMappingProposal, sendSupportRequest, buildSupportReport, downloadSupportReport, loadMaintainerEmail, truncateForMailto } from './api.js';
+export { anonymizeDienstplanText, buildSupportParserSample, scorePdfForSupportSample, summarizeEntriesForSupport } from './anonymize.js';

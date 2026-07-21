@@ -19,7 +19,19 @@ const {
     saveSettings,
     isConfigured,
     applySettingsToEnv,
+    getSettingsDir,
 } = require('./loga3-settings');
+const {
+    listHospitals,
+    readHospitalAsset,
+    loadUserMappingOverlay,
+    saveUserMappingOverlay,
+    deleteUserMappingOverlay,
+    mergeMapping,
+    installPackFromZip,
+    deletePack,
+    listInstalledPacks,
+} = require('./loga3-packs');
 const { openPath } = require('./loga3-cli-args');
 const { t, getMessages, setLocale } = require('./loga3-i18n');
 
@@ -74,6 +86,24 @@ function readBody(req) {
                 reject(new Error('Invalid JSON request'));
             }
         });
+        req.on('error', reject);
+    });
+}
+
+function readRawBody(req, { maxBytes = 40 * 1024 * 1024 } = {}) {
+    return new Promise((resolve, reject) => {
+        const chunks = [];
+        let size = 0;
+        req.on('data', (chunk) => {
+            size += chunk.length;
+            if (size > maxBytes) {
+                reject(new Error('Upload zu groß (max. 40 MB)'));
+                req.destroy();
+                return;
+            }
+            chunks.push(chunk);
+        });
+        req.on('end', () => resolve(Buffer.concat(chunks)));
         req.on('error', reject);
     });
 }
@@ -286,7 +316,7 @@ const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://localhost:${PORT}`);
 
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
     if (req.method === 'OPTIONS') {
@@ -392,6 +422,112 @@ const server = http.createServer(async (req, res) => {
                     'Content-Disposition': `inline; filename="${path.basename(filePath)}"`,
                 });
                 res.end(content);
+            } catch (error) {
+                sendJson(res, 404, { error: error.message });
+            }
+            return;
+        }
+
+        if (url.pathname === '/api/hospitals' && req.method === 'GET') {
+            sendJson(res, 200, { hospitals: listHospitals(CONVERTER_DIR) });
+            return;
+        }
+
+        if (url.pathname.startsWith('/api/hospital-assets/') && req.method === 'GET') {
+            const rel = decodeURIComponent(url.pathname.slice('/api/hospital-assets/'.length));
+            const slash = rel.indexOf('/');
+            if (slash <= 0) {
+                sendJson(res, 400, { error: 'Pfad: /api/hospital-assets/<id>/…' });
+                return;
+            }
+            const hospitalId = rel.slice(0, slash);
+            const assetPath = rel.slice(slash + 1);
+            try {
+                const { path: filePath, content } = readHospitalAsset(CONVERTER_DIR, hospitalId, assetPath);
+                const ext = path.extname(filePath);
+                res.writeHead(200, {
+                    'Content-Type': MIME_TYPES[ext] || 'application/octet-stream',
+                    'Cache-Control': 'no-cache',
+                });
+                res.end(content);
+            } catch (error) {
+                sendJson(res, 404, { error: error.message });
+            }
+            return;
+        }
+
+        if (url.pathname === '/api/user-mapping' && req.method === 'GET') {
+            const hospital = url.searchParams.get('hospital') || '';
+            const group = url.searchParams.get('group') || '';
+            const area = url.searchParams.get('area') || '';
+            sendJson(res, 200, {
+                overlay: loadUserMappingOverlay(hospital, group, area),
+            });
+            return;
+        }
+
+        if (url.pathname === '/api/user-mapping' && req.method === 'PUT') {
+            const body = await readBody(req);
+            const hospital = body.hospital || '';
+            const group = body.group || '';
+            const area = body.area || '';
+            if (!hospital || !group || !area) {
+                sendJson(res, 400, { error: 'hospital, group, area erforderlich' });
+                return;
+            }
+            const existing = loadUserMappingOverlay(hospital, group, area) || { presets: {}, colors: {} };
+            const next = mergeMapping(existing, {
+                colors: body.colors || {},
+                presets: body.presets || {},
+            });
+            const saved = saveUserMappingOverlay(hospital, group, area, next);
+            sendJson(res, 200, { ok: true, overlay: saved });
+            return;
+        }
+
+        if (url.pathname === '/api/user-mapping' && req.method === 'DELETE') {
+            const hospital = url.searchParams.get('hospital') || '';
+            const group = url.searchParams.get('group') || '';
+            const area = url.searchParams.get('area') || '';
+            sendJson(res, 200, deleteUserMappingOverlay(hospital, group, area));
+            return;
+        }
+
+        if (url.pathname === '/api/packs' && req.method === 'GET') {
+            sendJson(res, 200, {
+                packs: listInstalledPacks(),
+                packsDir: path.join(getSettingsDir(), 'packs'),
+            });
+            return;
+        }
+
+        if (url.pathname === '/api/packs/install' && req.method === 'POST') {
+            const buf = await readRawBody(req);
+            if (!buf.length) {
+                sendJson(res, 400, { error: 'ZIP-Body fehlt' });
+                return;
+            }
+            const tmpZip = path.join(getSettingsDir(), `pack-upload-${Date.now()}.zip`);
+            try {
+                if (!fs.existsSync(getSettingsDir())) fs.mkdirSync(getSettingsDir(), { recursive: true });
+                fs.writeFileSync(tmpZip, buf);
+                const installed = installPackFromZip(tmpZip);
+                pushLog(`📦 Pack installiert: ${installed.name} (${installed.id})`);
+                sendJson(res, 200, { ok: true, ...installed, hospitals: listHospitals(CONVERTER_DIR) });
+            } catch (error) {
+                sendJson(res, 400, { error: error.message || String(error) });
+            } finally {
+                try { fs.unlinkSync(tmpZip); } catch { /* ignore */ }
+            }
+            return;
+        }
+
+        if (url.pathname.startsWith('/api/packs/') && req.method === 'DELETE') {
+            const id = decodeURIComponent(url.pathname.slice('/api/packs/'.length));
+            try {
+                const result = deletePack(id);
+                pushLog(`🗑️ Pack entfernt: ${result.id}`);
+                sendJson(res, 200, { ...result, hospitals: listHospitals(CONVERTER_DIR) });
             } catch (error) {
                 sendJson(res, 404, { error: error.message });
             }

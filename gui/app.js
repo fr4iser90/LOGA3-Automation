@@ -40,6 +40,7 @@ function t(key, vars = {}) {
   }
   return text;
 }
+window.t = t;
 
 function applyStaticI18n() {
   document.documentElement.lang = locale;

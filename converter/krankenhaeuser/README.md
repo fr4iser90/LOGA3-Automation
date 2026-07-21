@@ -1,51 +1,32 @@
-# Schichttypen für Krankenhäuser/Stationen
+# Krankenhaus-Packs & User-Mappings
 
-Hier können Krankenhäuser oder Stationen ihre eigenen Schichttypen als JSON-Datei hinterlegen.
+## Builtin
 
-## Anleitung
+Unter `krankenhaeuser/<id>/`:
 
-1. Lege einen neuen Ordner mit dem Namen deines Krankenhauses/Station an, z.B.:
-   ```
-   krankenhaeuser/mein-krankenhaus/
-   ```
-2. Lege darin eine Datei `shiftTypes.json` an.
-
-3. Die Struktur der Datei sollte wie folgt aussehen:
-
-```json
-{
-  "pflege": {
-    "op": {
-      "default": {
-        "07:35-15:50": "F"
-      }
-    },
-    "station1": {
-      "default": {
-        "06:00-14:00": "F"
-      }
-    }
-  },
-  "aerzte": {
-    "op": {
-      "default": {
-        "07:00-15:00": "A"
-      }
-    }
-  }
-}
+```
+krankenhaeuser/mein-kh/
+  config.json      # name, groups[], areas[] mit mapping-Pfaden
+  parser.js        # export function parse...(text) → { year, month, mainEntries, … }
+  mappings/...
 ```
 
-- Berufsgruppen: z.B. `pflege`, `aerzte`, `servicekraefte`
-- Bereiche: z.B. `op`, `station1`, `station2`, ...
-- Presets: z.B. `default`, `anasthesie`, `ota`, ...
-- Zeitbereiche: `"07:35-15:50"` (Start-Ende), Wert = Schichtcode
+## Pack installieren (ohne neue .exe)
+
+1. Ordner wie oben als **ZIP** packen (eine Root-Ebene mit `config.json`).
+2. In der App: **Einstellungen → Krankenhaus-Packs → Pack (.zip) installieren**.
+3. Pack landet unter `data/packs/<id>/` (bzw. portable Root) und erscheint im Krankenhaus-Dropdown.
+
+Optional in `config.json`: `"id": "mein-kh"` (sonst Ordnername).
+
+## User-Mapping
+
+Wenn Zeiten im Plan fehlen:
+
+1. Nach dem Umwandeln Codes neben den unbekannten Zeiten eintragen.
+2. **User-Mapping speichern** → Overlay unter `data/user-mappings/`.
+3. Gilt nur für das gewählte Krankenhaus + Berufsgruppe + Bereich; Basis-Mapping bleibt unangetastet.
 
 ## Pull Request
 
-- Reiche deine Änderungen als Pull Request ein.
-- Prüfe, dass die JSON-Datei gültig ist (z.B. mit https://jsonlint.com/).
-
-## Beispiel
-
-Siehe [st-elisabeth-leipzig/shiftTypes.json](./st-elisabeth-leipzig/shiftTypes.json)
+Weiterhin willkommen: neue Builtin-Ordner per PR.

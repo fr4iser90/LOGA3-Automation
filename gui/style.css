@@ -246,6 +246,38 @@ button.danger {
   font-weight: 500;
 }
 
+.support-request {
+  margin-top: 16px;
+}
+
+.support-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.support-form label {
+  display: grid;
+  gap: 4px;
+  font-size: 0.9rem;
+}
+
+.support-form input[type="text"],
+.support-form textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: inherit;
+  font: inherit;
+}
+
+.support-form textarea {
+  resize: vertical;
+  min-height: 72px;
+}
+
 .log-panel {
   background: var(--panel);
   border: 1px solid var(--border);
@@ -604,6 +636,59 @@ button.linkish:hover:not(:disabled) {
 
 .missing-shifts-list {
   display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.missing-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.missing-code {
+  width: 7rem;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: inherit;
+  font: inherit;
+}
+
+.missing-actions {
+  margin-top: 8px;
+}
+
+.packs-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.pack-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  font-size: 0.9rem;
+}
+
+.pack-row code {
+  font-size: 0.8rem;
+  opacity: 0.75;
+}
+
+.file-row {
+  display: grid;
+  gap: 6px;
+}
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 6px;

@@ -1,12 +1,11 @@
 /**
  * Lädt Krankenhaus-Konfiguration, Schicht-Mappings und Parser.
- * Pfade relativ zu converter/ (via import.meta.url), unabhängig von der HTML-URL.
+ * Builtin + installierte Packs über /api/hospital-assets/; User-Overlays gemerged.
  */
 
-const CONVERTER_ROOT = new URL('../', import.meta.url);
-
-function assetUrl(relativePath) {
-    return new URL(relativePath, CONVERTER_ROOT);
+function hospitalAssetUrl(krankenhaus, relativePath) {
+    const clean = String(relativePath || '').replace(/^\/+/, '');
+    return `/api/hospital-assets/${encodeURIComponent(krankenhaus)}/${clean.split('/').map(encodeURIComponent).join('/')}`;
 }
 
 /**
@@ -14,7 +13,7 @@ function assetUrl(relativePath) {
  * @returns {Promise<Object>}
  */
 export async function loadHospitalConfig(krankenhaus) {
-    const url = assetUrl(`krankenhaeuser/${krankenhaus}/config.json`);
+    const url = hospitalAssetUrl(krankenhaus, 'config.json');
     const response = await fetch(url);
     if (!response.ok) {
         throw new Error(`Konnte Konfiguration für ${krankenhaus} nicht laden: ${response.statusText}`);
@@ -25,15 +24,48 @@ export async function loadHospitalConfig(krankenhaus) {
 /**
  * @param {string} krankenhaus
  * @param {string} mappingPath - relativ zum Krankenhaus-Ordner
+ * @param {{ group?: string, area?: string }} [opts] - für User-Overlay
  * @returns {Promise<Object>}
  */
-export async function loadMapping(krankenhaus, mappingPath) {
-    const url = assetUrl(`krankenhaeuser/${krankenhaus}/${mappingPath}`);
+export async function loadMapping(krankenhaus, mappingPath, opts = {}) {
+    const url = hospitalAssetUrl(krankenhaus, mappingPath);
     const response = await fetch(url);
     if (!response.ok) {
         throw new Error(`Konnte Mapping ${mappingPath} nicht laden: ${response.statusText}`);
     }
-    return await response.json();
+    let mapping = await response.json();
+
+    const group = opts.group;
+    const area = opts.area;
+    if (group && area) {
+        try {
+            const q = new URLSearchParams({ hospital: krankenhaus, group, area });
+            const overlayResp = await fetch(`/api/user-mapping?${q}`);
+            if (overlayResp.ok) {
+                const data = await overlayResp.json();
+                if (data.overlay) {
+                    mapping = mergeMappingClient(mapping, data.overlay);
+                }
+            }
+        } catch {
+            // Overlay optional
+        }
+    }
+    return mapping;
+}
+
+export function mergeMappingClient(base, overlay) {
+    if (!base) return overlay || null;
+    if (!overlay) return base;
+    const out = {
+        ...base,
+        colors: { ...(base.colors || {}), ...(overlay.colors || {}) },
+        presets: { ...(base.presets || {}) },
+    };
+    for (const [preset, shifts] of Object.entries(overlay.presets || {})) {
+        out.presets[preset] = { ...(out.presets[preset] || {}), ...shifts };
+    }
+    return out;
 }
 
 /**
@@ -42,7 +74,8 @@ export async function loadMapping(krankenhaus, mappingPath) {
  */
 export async function loadHospitalParser(krankenhaus) {
     try {
-        const module = await import(`../krankenhaeuser/${krankenhaus}/parser.js`);
+        const url = hospitalAssetUrl(krankenhaus, 'parser.js');
+        const module = await import(/* @vite-ignore */ url);
         if (module.parseStElisabeth) return module.parseStElisabeth;
         if (module.default) return module.default;
         return Object.values(module).find((f) => typeof f === 'function') || null;
@@ -56,10 +89,19 @@ export async function loadHospitalParser(krankenhaus) {
  * @returns {Promise<Object>}
  */
 export async function loadSpecialShiftTypes() {
-    const url = assetUrl('src/specialShiftTypes.json');
-    const response = await fetch(url);
+    const response = await fetch('/converter/src/specialShiftTypes.json');
     if (!response.ok) {
         throw new Error(`Konnte Sonder-Schichttypen-Konfiguration nicht laden: ${response.statusText}`);
     }
     return await response.json();
+}
+
+/**
+ * @returns {Promise<Array<{id:string,name:string,source:string}>>}
+ */
+export async function listHospitals() {
+    const response = await fetch('/api/hospitals');
+    if (!response.ok) throw new Error('Krankenhausliste nicht ladbar');
+    const data = await response.json();
+    return data.hospitals || [];
 }

@@ -85,7 +85,13 @@
       <div class="convert-card">
         <div id="missingShiftsContainer" class="missing-shifts" hidden>
           <p data-i18n="convertMissingShifts">Unbekannte Zeiten (nicht im Mapping):</p>
+          <p class="field-hint" data-i18n="userMappingHint">Codes eintragen und speichern — gilt nur für diesen Bereich (User-Mapping).</p>
           <div id="missingShiftsList" class="missing-shifts-list"></div>
+          <div class="export-bar missing-actions">
+            <button id="saveUserMappingBtn" type="button" class="primary" data-i18n="userMappingSave">User-Mapping speichern</button>
+            <button id="resetUserMappingBtn" type="button" data-i18n="userMappingReset">User-Mapping zurücksetzen</button>
+          </div>
+          <p id="userMappingStatus" class="convert-status" hidden></p>
         </div>
         <div id="previewContent" class="preview-table-wrap">
           <p class="hint" data-i18n="convertPreviewEmpty">Noch keine Einträge — zuerst Monate laden.</p>
@@ -110,6 +116,42 @@
         </div>
         <p id="googleSyncHint" class="hint" data-i18n="googleSyncHint">Empfohlen: eigenen Kalender „Dienstplan“. Sync löscht im gewählten Kalender alle Termine im Schicht-Zeitraum und legt sie neu an.</p>
       </div>
+
+      <details class="collapsible support-request" id="supportRequestDetails">
+        <summary data-i18n="supportRequestTitle">Unterstützung für meinen Bereich anfragen</summary>
+        <p class="hint" data-i18n="supportRequestIntro">
+          Anderes Krankenhaus oder anderer PDF-Aufbau? Anonymisierte Struktur per E-Mail schicken — wir können Parser/Mapping ergänzen.
+          Es gehen keine Roh-PDFs raus, nur bereinigter Text (Namen/IDs entfernt).
+        </p>
+        <div class="support-form">
+          <label>
+            <span data-i18n="supportHospital">Krankenhaus / Klinik</span>
+            <input id="supportHospital" type="text" placeholder="z. B. St. Elisabeth Leipzig" autocomplete="organization">
+          </label>
+          <label>
+            <span data-i18n="supportGroup">Berufsgruppe</span>
+            <input id="supportGroup" type="text" placeholder="z. B. Ärztlicher Dienst">
+          </label>
+          <label>
+            <span data-i18n="supportArea">Bereich / Station</span>
+            <input id="supportArea" type="text" placeholder="z. B. Anästhesie / Station 3">
+          </label>
+          <label>
+            <span data-i18n="supportNote">Kurzbeschreibung (optional)</span>
+            <textarea id="supportNote" rows="3" placeholder="Was fehlt / was falsch geparst wird?"></textarea>
+          </label>
+          <label class="checkbox-row">
+            <input id="supportIncludeSample" type="checkbox" checked>
+            <span data-i18n="supportIncludeSample">Anonymisierten PDF-Rohtext (Parser-Input) anhängen</span>
+          </label>
+          <p id="supportSampleHint" class="field-hint">Noch kein Sample — zuerst PDFs umwandeln.</p>
+          <div class="export-bar">
+            <button id="supportSendBtn" type="button" class="primary" data-i18n="supportSend">Per E-Mail senden</button>
+            <button id="supportDownloadBtn" type="button" data-i18n="supportDownload">Als Textdatei speichern</button>
+          </div>
+          <p id="supportStatus" class="convert-status" hidden></p>
+        </div>
+      </details>
     </section>
 
     <details class="collapsible" id="pdfDetails">
@@ -165,6 +207,10 @@
           <legend data-i18n="convertMapping">Schicht-Mapping</legend>
           <p class="modal-text" data-i18n="settingsMappingIntro">Bleibt gespeichert — du wechselst das nur, wenn Station/Beruf sich ändert.</p>
           <label>
+            <span data-i18n="convertHospital">Krankenhaus</span>
+            <select id="settingsHospital"></select>
+          </label>
+          <label>
             <span data-i18n="convertGroup">Berufsgruppe</span>
             <select id="settingsGroup"></select>
           </label>
@@ -184,6 +230,17 @@
             <input id="richEventDetailsChk" type="checkbox">
             <span data-i18n="convertRichDetails">Rich-Details in Kalender-Events</span>
           </label>
+        </fieldset>
+
+        <fieldset class="settings-section">
+          <legend data-i18n="packsTitle">Krankenhaus-Packs</legend>
+          <p class="modal-text" data-i18n="packsIntro">ZIP mit config.json, mappings/ und optional parser.js installieren — ohne neue App-Version.</p>
+          <label class="file-row">
+            <span data-i18n="packsInstall">Pack (.zip) installieren</span>
+            <input id="packInstallInput" type="file" accept=".zip,application/zip">
+          </label>
+          <div id="packsList" class="packs-list"></div>
+          <p id="packsStatus" class="field-hint"></p>
         </fieldset>
 
         <p id="settingsError" class="form-error" hidden></p>
