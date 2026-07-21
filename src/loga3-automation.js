@@ -4,7 +4,7 @@ const { chromium, firefox } = require('playwright');
 const path = require('path');
 const fs = require('fs');
 const { getDownloadsDir, getLogsDir, resolveHeadless } = require('./loga3-inventory');
-const { applySettingsToEnv } = require('./loga3-settings');
+const { applySettingsToEnv, resolveBaseUrl } = require('./loga3-settings');
 
 const { debugLog, userT, userErrorT } = require('./loga3-log');
 const { t } = require('./loga3-i18n');
@@ -27,13 +27,13 @@ try {
 
 /**
  * LOGA3 Login Automation Script
- * Automates login to https://stelisab.pi-asp.de/loga3/#
+ * Tenant URL from LOGA3_BASE_URL / GUI settings / loga3-config.js
  */
 class Loga3Automation {
     constructor() {
         this.browser = null;
         this.page = null;
-        this.baseUrl = config.baseUrl || 'https://stelisab.pi-asp.de/loga3/#';
+        this.baseUrl = resolveBaseUrl(config.baseUrl);
         this.browserConfig = config.browser || {};
         this.screenshotConfig = config.screenshots || {};
         this.elementTimeout = this.browserConfig.timeout || 60000;
@@ -83,6 +83,10 @@ class Loga3Automation {
 
     async navigateToLogin() {
         debugLog('📡 Navigating to LOGA3 login page...');
+
+        if (!this.baseUrl) {
+            throw new Error(t('errBaseUrl'));
+        }
         
         try {
             await this.page.goto(this.baseUrl, { 

@@ -5,7 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const { parseAbrechnungsmonat, periodToFilename } = require('./loga3-period');
 const { MONTH_LABELS, getDownloadsDir, getLogsDir, resolveHeadless } = require('./loga3-inventory');
-const { applySettingsToEnv } = require('./loga3-settings');
+const { applySettingsToEnv, resolveBaseUrl } = require('./loga3-settings');
 
 const WEEKDAY_CODES = ['SO', 'MO', 'DI', 'MI', 'DO', 'FR', 'SA'];
 
@@ -2145,7 +2145,10 @@ class Loga3Workflow {
             
             // Navigate to LOGA3 first
             debugLog('📡 Navigating to LOGA3...');
-            const baseUrl = config.baseUrl || 'https://stelisab.pi-asp.de/loga3/#';
+            const baseUrl = resolveBaseUrl(config.baseUrl);
+            if (!baseUrl) {
+                throw new Error(require('./loga3-i18n').t('errBaseUrl'));
+            }
             await this.page.goto(baseUrl, { 
                 waitUntil: 'domcontentloaded',
                 timeout: this.pageLoadTimeout 

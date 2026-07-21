@@ -21,7 +21,9 @@ module.exports = {
         sleepBetweenSteps: 2000,
     },
 
-    baseUrl: 'https://stelisab.pi-asp.de/loga3/#',
+    // Prefer LOGA3_BASE_URL in .env or GUI Settings — no employer URL in git
+    baseUrl: '',
+
 
     screenshots: {
         enabled: true,

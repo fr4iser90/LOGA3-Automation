@@ -12,7 +12,8 @@ services:
       LOGA3_HEADLESS: "${LOGA3_HEADLESS:-1}"
       LOGA3_DOWNLOADS_DIR: /app/downloads
       LOGA3_LOGS_DIR: /app/logs
-      # Optional: still works. Prefer setting login in the web UI (stored in volume).
+      # Optional: still works. Prefer URL + login in the web UI (stored in volume).
+      LOGA3_BASE_URL: "${LOGA3_BASE_URL:-}"
       LOGA3_USERNAME: "${LOGA3_USERNAME:-}"
       LOGA3_PASSWORD: "${LOGA3_PASSWORD:-}"
     volumes:

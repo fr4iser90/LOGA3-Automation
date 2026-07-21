@@ -65,7 +65,7 @@ npm run download:next3
 
 `--open-converter` opens the local calendar section (`http://127.0.0.1:3847/#calendar`).
 
-Optional instead of the GUI: `cp .env.example .env` and set `LOGA3_USERNAME` / `LOGA3_PASSWORD`.
+Optional instead of the GUI: `cp .env.example .env` and set `LOGA3_BASE_URL` / `LOGA3_USERNAME` / `LOGA3_PASSWORD`.
 
 ## npm scripts
 

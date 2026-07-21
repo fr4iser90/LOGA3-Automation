@@ -368,6 +368,7 @@ const server = http.createServer(async (req, res) => {
             const saved = saveSettings({
                 username: body.username,
                 password: body.password,
+                baseUrl: body.baseUrl,
                 headless: body.headless,
                 locale: body.locale,
                 convert: body.convert,

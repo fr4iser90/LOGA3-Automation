@@ -27,6 +27,7 @@ const settingsModal = document.getElementById('settingsModal');
 const settingsForm = document.getElementById('settingsForm');
 const settingsUsername = document.getElementById('settingsUsername');
 const settingsPassword = document.getElementById('settingsPassword');
+const settingsBaseUrl = document.getElementById('settingsBaseUrl');
 const settingsHeadless = document.getElementById('settingsHeadless');
 const settingsLocale = document.getElementById('settingsLocale');
 const settingsCancelBtn = document.getElementById('settingsCancelBtn');
@@ -226,6 +227,7 @@ async function loadSettingsIntoForm() {
   if (data.locale) locale = data.locale;
   configured = Boolean(data.configured);
   settingsUsername.value = data.username || '';
+  settingsBaseUrl.value = data.baseUrl || '';
   settingsHeadless.checked = data.headless === true;
   settingsLocale.value = locale;
   if (data.convert && typeof window.onConvertSettingsSaved === 'function') {
@@ -434,6 +436,7 @@ settingsForm.addEventListener('submit', async (event) => {
       : undefined;
     const payload = {
       username: settingsUsername.value.trim(),
+      baseUrl: settingsBaseUrl.value.trim(),
       headless: settingsHeadless.checked,
       locale: settingsLocale.value,
       convert,

@@ -44,6 +44,26 @@ function normalizeConvert(raw = {}) {
     };
 }
 
+function normalizeBaseUrl(raw) {
+    const url = String(raw || '').trim();
+    if (!url) return '';
+    return url;
+}
+
+/**
+ * LOGA3 tenant URL — never hardcode employer hosts in source.
+ * Priority: LOGA3_BASE_URL env → GUI settings → loga3-config.js (caller).
+ */
+function resolveBaseUrl(configBaseUrl = '') {
+    const fromEnv = normalizeBaseUrl(process.env.LOGA3_BASE_URL);
+    if (fromEnv) return fromEnv;
+    const fromSettings = normalizeBaseUrl(loadSettings().baseUrl);
+    if (fromSettings) return fromSettings;
+    const fromConfig = normalizeBaseUrl(configBaseUrl);
+    if (fromConfig) return fromConfig;
+    return '';
+}
+
 function loadSettings() {
     const filePath = getSettingsPath();
     try {
@@ -52,6 +72,7 @@ function loadSettings() {
         return {
             username: String(data.username || ''),
             password: String(data.password || ''),
+            baseUrl: normalizeBaseUrl(data.baseUrl),
             headless: data.headless === undefined ? null : Boolean(data.headless),
             locale: normalizeLocale(data.locale) || null,
             convert: normalizeConvert(data.convert || {}),
@@ -60,6 +81,7 @@ function loadSettings() {
         return {
             username: '',
             password: '',
+            baseUrl: '',
             headless: null,
             locale: null,
             convert: normalizeConvert({}),
@@ -68,8 +90,12 @@ function loadSettings() {
 }
 
 function isConfigured(settings = loadSettings()) {
-    if (process.env.LOGA3_USERNAME && process.env.LOGA3_PASSWORD) return true;
-    return Boolean(settings.username && settings.password);
+    const hasCreds = Boolean(
+        (process.env.LOGA3_USERNAME && process.env.LOGA3_PASSWORD)
+        || (settings.username && settings.password)
+    );
+    const hasUrl = Boolean(resolveBaseUrl(settings.baseUrl));
+    return hasCreds && hasUrl;
 }
 
 /**
@@ -80,6 +106,9 @@ function saveSettings(patch = {}) {
     const next = {
         username: patch.username !== undefined ? String(patch.username).trim() : current.username,
         password: current.password,
+        baseUrl: patch.baseUrl !== undefined
+            ? normalizeBaseUrl(patch.baseUrl)
+            : current.baseUrl,
         headless: patch.headless !== undefined ? Boolean(patch.headless) : current.headless,
         locale: patch.locale !== undefined
             ? (normalizeLocale(patch.locale) || current.locale || 'de')
@@ -106,6 +135,12 @@ function saveSettings(patch = {}) {
             throw new Error(t('errPassword'));
         }
     }
+    if (!next.baseUrl && !normalizeBaseUrl(process.env.LOGA3_BASE_URL)) {
+        throw new Error(t('errBaseUrl'));
+    }
+    if (!next.baseUrl) {
+        next.baseUrl = normalizeBaseUrl(process.env.LOGA3_BASE_URL);
+    }
 
     const dir = getSettingsDir();
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -114,6 +149,7 @@ function saveSettings(patch = {}) {
     const toWrite = {
         username: next.username,
         password: next.password,
+        baseUrl: next.baseUrl,
         headless: next.headless,
         locale: next.locale,
         convert: next.convert,
@@ -130,9 +166,14 @@ function saveSettings(patch = {}) {
         process.env.LOGA3_HEADLESS = next.headless ? '1' : '0';
     }
 
+    if (next.baseUrl) {
+        process.env.LOGA3_BASE_URL = next.baseUrl;
+    }
+
     return {
         configured: true,
         username: next.username,
+        baseUrl: next.baseUrl || resolveBaseUrl(),
         headless: next.headless === null ? undefined : next.headless,
         locale: next.locale || getLocale(),
         convert: next.convert,
@@ -155,6 +196,7 @@ function getPublicSettings() {
     return {
         configured: isConfigured(settings),
         username: process.env.LOGA3_USERNAME || settings.username || '',
+        baseUrl: resolveBaseUrl(settings.baseUrl),
         headless,
         locale,
         convert: settings.convert,
@@ -171,6 +213,9 @@ function applySettingsToEnv(env = process.env) {
     }
     if (!env.LOGA3_PASSWORD && settings.password) {
         env.LOGA3_PASSWORD = settings.password;
+    }
+    if (!env.LOGA3_BASE_URL && settings.baseUrl) {
+        env.LOGA3_BASE_URL = settings.baseUrl;
     }
     // GUI checkbox is source of truth once set (overrides stale process env).
     if (settings.headless !== null) {
@@ -194,4 +239,6 @@ module.exports = {
     getPublicSettings,
     applySettingsToEnv,
     normalizeConvert,
+    normalizeBaseUrl,
+    resolveBaseUrl,
 };
