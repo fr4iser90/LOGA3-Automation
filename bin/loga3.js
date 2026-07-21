@@ -4,6 +4,8 @@
  *
  *   loga3 fetch --months 2026-05,2026-06 --out ./pdfs
  *   loga3 fetch --last 3 --out ./pdfs --open-folder --open-converter
+ *
+ * --open-converter opens the local GUI calendar section (http://127.0.0.1:3847/#calendar).
  */
 const path = require('path');
 
@@ -69,13 +71,13 @@ async function main() {
     const result = await complete.run();
     const saved = result?.savedFiles || [];
 
-    console.log('\n—— ShiftPlanConverter handoff ——');
+    console.log('\n—— Convert / Sync ——');
     console.log(`PDFs (${saved.length}): ${outDir}`);
     for (const file of saved) {
         console.log(`  • ${path.basename(file)}`);
     }
-    console.log(`Converter: ${options.converterUrl}`);
-    console.log('Drop the PDFs into the converter (or use --open-converter).');
+    console.log(`Convert tab: ${options.converterUrl}`);
+    console.log('Open the GUI calendar section (or use --open-converter).');
 
     if (options.openFolder) {
         if (openPath(outDir)) console.log(`📂 Opened folder: ${outDir}`);

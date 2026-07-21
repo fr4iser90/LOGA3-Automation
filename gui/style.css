@@ -241,6 +241,11 @@ button.danger {
   margin: 12px 0 20px;
 }
 
+.hint.warn-hint {
+  color: #b45309;
+  font-weight: 500;
+}
+
 .log-panel {
   background: var(--panel);
   border: 1px solid var(--border);
@@ -312,6 +317,47 @@ button.danger {
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 20px;
+  max-height: min(90vh, 900px);
+  overflow: auto;
+}
+
+.modal-card-wide {
+  width: min(520px, 100%);
+}
+
+.settings-section {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px 4px;
+  margin: 0 0 14px;
+}
+
+.settings-section legend {
+  padding: 0 6px;
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.convert-mapping-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+button.linkish {
+  background: transparent;
+  border: none;
+  color: var(--accent);
+  padding: 0;
+  text-decoration: underline;
+  font-size: inherit;
+}
+
+button.linkish:hover:not(:disabled) {
+  border-color: transparent;
+  color: var(--text);
 }
 
 .modal-card h2 {
@@ -368,4 +414,299 @@ button.danger {
   justify-content: flex-end;
   gap: 10px;
   margin-top: 8px;
+}
+
+.flow-steps {
+  list-style: none;
+  display: flex;
+  gap: 12px;
+  margin: 0 0 24px;
+  padding: 0;
+}
+
+.flow-step {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.flow-step.active {
+  border-color: var(--accent);
+  color: var(--text);
+  box-shadow: 0 0 0 1px rgba(91, 159, 212, 0.25);
+}
+
+.flow-step.done {
+  border-color: rgba(62, 207, 142, 0.45);
+  color: var(--text);
+}
+
+.flow-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  font-weight: 700;
+  font-size: 0.85rem;
+  flex-shrink: 0;
+}
+
+.flow-step.active .flow-num {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #081018;
+}
+
+.flow-step.done .flow-num {
+  background: rgba(62, 207, 142, 0.2);
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.flow-section {
+  margin-bottom: 28px;
+}
+
+.section-head {
+  margin-bottom: 14px;
+}
+
+.section-head h2 {
+  margin: 0 0 4px;
+  font-size: 1.15rem;
+}
+
+.section-desc {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.convert-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+
+.convert-pdf-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.pdf-list {
+  max-height: 220px;
+  overflow: auto;
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pdf-item {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 10px !important;
+  color: var(--text) !important;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
+.pdf-name {
+  flex: 1;
+  word-break: break-all;
+  font-size: 0.88rem;
+}
+
+.pdf-meta {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.convert-status {
+  margin: 0 0 12px;
+  font-size: 0.95rem;
+  color: var(--ok);
+}
+
+.convert-status.error {
+  color: var(--missing);
+}
+
+.preview-table-wrap {
+  overflow: auto;
+  max-height: 360px;
+}
+
+.preview-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.preview-table th,
+.preview-table td {
+  border: 1px solid var(--border);
+  padding: 6px 8px;
+  text-align: left;
+}
+
+.preview-table th {
+  background: var(--bg);
+  color: var(--muted);
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.preview-table tr.preview-month td {
+  background: rgba(61, 139, 253, 0.06);
+}
+
+.preview-table tr.preview-week td {
+  background: rgba(61, 139, 253, 0.14);
+}
+
+.preview-table tr.preview-today td {
+  background: rgba(61, 139, 253, 0.22);
+  box-shadow: inset 3px 0 0 var(--accent, #3d8bfd);
+  font-weight: 600;
+}
+
+.missing-shifts {
+  margin-bottom: 12px;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(230, 180, 80, 0.1);
+  border: 1px solid rgba(230, 180, 80, 0.35);
+}
+
+.missing-shifts-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.google-sync-card h3 {
+  margin: 0 0 10px;
+  font-size: 1rem;
+}
+
+.calendar-select-wrap {
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 8px !important;
+  color: var(--text) !important;
+  margin: 0;
+}
+
+.calendar-select-wrap select {
+  min-width: 200px;
+}
+
+.month-summary-details {
+  margin-bottom: 14px;
+}
+
+.month-summary {
+  margin-top: 8px;
+  margin-bottom: 0;
+}
+
+.summary-block {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+}
+
+.summary-block h3 {
+  margin: 0 0 10px;
+  font-size: 0.95rem;
+}
+
+.export-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+#calendarSelect {
+  min-width: 180px;
+}
+
+.collapsible {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+}
+
+.collapsible summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.92rem;
+  user-select: none;
+}
+
+.collapsible[open] summary {
+  color: var(--text);
+  margin-bottom: 10px;
+}
+
+.log-collapsible #logOutput {
+  margin: 0;
+  min-height: 100px;
+  max-height: 220px;
+  overflow: auto;
+  font-size: 0.82rem;
+  color: #c9d5e5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+button.linkish {
+  background: transparent;
+  border: none;
+  color: var(--accent);
+  padding: 0;
+  text-decoration: underline;
+  font-size: inherit;
+}
+
+button.linkish:hover:not(:disabled) {
+  border-color: transparent;
+  color: var(--text);
+}
+
+@media (max-width: 640px) {
+  .flow-steps {
+    flex-direction: column;
+  }
 }

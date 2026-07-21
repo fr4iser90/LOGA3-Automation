@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 
-const DEFAULT_CONVERTER_URL = process.env.LOGA3_CONVERTER_URL || 'https://shift.fr4iser.com';
+const DEFAULT_CONVERTER_URL = process.env.LOGA3_CONVERTER_URL || 'http://127.0.0.1:3847/#calendar';
 
 function parsePeriodToken(token) {
     const value = String(token).trim();
@@ -186,7 +186,7 @@ function openPath(targetPath) {
 }
 
 function printFetchHelp() {
-    console.log(`loga3 fetch — download Zeitprotokoll PDFs for ShiftPlanConverter
+    console.log(`loga3 fetch — download Zeitprotokoll PDFs for the Convert tab
 
 Usage:
   loga3 fetch --months 2026-05,2026-06 --out ./pdfs
@@ -200,14 +200,13 @@ Options:
   --period YYYY-MM  Single month (repeatable via multiple flags)
   --out DIR         Output folder (sets LOGA3_DOWNLOADS_DIR)
   --open-folder     Open the output folder after download
-  --open-converter  Open ShiftPlanConverter in the browser
-  --converter-url   Override converter URL (default: ${DEFAULT_CONVERTER_URL})
+  --open-converter  Open local Convert tab (GUI must be running)
+  --converter-url   Override URL (default: ${DEFAULT_CONVERTER_URL})
   --once            Exit when done (implied by fetch)
 
-Handoff:
+Workflow:
   1) PDFs land in --out (or ./downloads)
-  2) Open ${DEFAULT_CONVERTER_URL} and drop/select the PDFs
-     (or pass --open-converter)
+  2) GUI „In den Kalender“ (or --open-converter → ${DEFAULT_CONVERTER_URL})
 `);
 }
 

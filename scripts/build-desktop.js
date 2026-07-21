@@ -20,6 +20,7 @@ const APP_FILES = [
     'package-lock.json',
     '.env.example',
     'gui',
+    'converter',
 ];
 
 /** All src/loga3-*.js modules are packaged (avoids forgetting new files like i18n/log). */
@@ -197,7 +198,7 @@ function stageApp(appDir) {
  * Catches missing modules (e.g. new require('./loga3-i18n')) before tagging a release.
  */
 function validateStagedApp(appDir, srcFiles = listSrcFiles()) {
-    const required = [...srcFiles, 'desktop-entry.js', 'package.json', 'gui/index.html', 'gui/app.js'];
+    const required = [...srcFiles, 'desktop-entry.js', 'package.json', 'gui/index.html', 'gui/app.js', 'gui/convert-tab.js', 'converter/src/index.js'];
     for (const rel of required) {
         const full = path.join(appDir, rel);
         if (!fs.existsSync(full)) {

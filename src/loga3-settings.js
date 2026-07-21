@@ -5,6 +5,17 @@ const { normalizeLocale, getLocale, setLocale, t } = require('./loga3-i18n');
 const PROJECT_ROOT = path.join(__dirname, '..');
 const SETTINGS_FILE = 'loga3-settings.json';
 
+const DEFAULT_CONVERT = {
+    hospital: 'st-elisabeth-leipzig',
+    group: 'pflege',
+    area: 'op-bereich',
+    preset: '',
+    showMonthSummary: true,
+    richEventDetails: false,
+    // Public OAuth web client (ShiftPlanConverter) — not a secret
+    googleClientId: '443643010945-l4r4n5t6vaj93tcqs8jlbvccltd06kaf.apps.googleusercontent.com',
+};
+
 function getSettingsDir() {
     if (process.env.LOGA3_PORTABLE_ROOT) {
         return path.resolve(process.env.LOGA3_PORTABLE_ROOT);
@@ -14,6 +25,23 @@ function getSettingsDir() {
 
 function getSettingsPath() {
     return path.join(getSettingsDir(), SETTINGS_FILE);
+}
+
+function normalizeConvert(raw = {}) {
+    return {
+        hospital: String(raw.hospital || DEFAULT_CONVERT.hospital).trim() || DEFAULT_CONVERT.hospital,
+        group: String(raw.group || DEFAULT_CONVERT.group).trim() || DEFAULT_CONVERT.group,
+        area: String(raw.area || DEFAULT_CONVERT.area).trim() || DEFAULT_CONVERT.area,
+        preset: String(raw.preset || '').trim(),
+        showMonthSummary: raw.showMonthSummary === undefined
+            ? DEFAULT_CONVERT.showMonthSummary
+            : Boolean(raw.showMonthSummary),
+        richEventDetails: raw.richEventDetails === undefined
+            ? DEFAULT_CONVERT.richEventDetails
+            : Boolean(raw.richEventDetails),
+        googleClientId: String(raw.googleClientId || DEFAULT_CONVERT.googleClientId).trim()
+            || DEFAULT_CONVERT.googleClientId,
+    };
 }
 
 function loadSettings() {
@@ -26,9 +54,16 @@ function loadSettings() {
             password: String(data.password || ''),
             headless: data.headless === undefined ? null : Boolean(data.headless),
             locale: normalizeLocale(data.locale) || null,
+            convert: normalizeConvert(data.convert || {}),
         };
     } catch {
-        return { username: '', password: '', headless: null, locale: null };
+        return {
+            username: '',
+            password: '',
+            headless: null,
+            locale: null,
+            convert: normalizeConvert({}),
+        };
     }
 }
 
@@ -49,6 +84,9 @@ function saveSettings(patch = {}) {
         locale: patch.locale !== undefined
             ? (normalizeLocale(patch.locale) || current.locale || 'de')
             : current.locale,
+        convert: patch.convert !== undefined
+            ? normalizeConvert({ ...current.convert, ...patch.convert })
+            : current.convert,
     };
 
     if (patch.password !== undefined && String(patch.password).length > 0) {
@@ -73,7 +111,14 @@ function saveSettings(patch = {}) {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
     const filePath = getSettingsPath();
-    fs.writeFileSync(filePath, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
+    const toWrite = {
+        username: next.username,
+        password: next.password,
+        headless: next.headless,
+        locale: next.locale,
+        convert: next.convert,
+    };
+    fs.writeFileSync(filePath, `${JSON.stringify(toWrite, null, 2)}\n`, { mode: 0o600 });
     try {
         fs.chmodSync(filePath, 0o600);
     } catch {
@@ -90,6 +135,7 @@ function saveSettings(patch = {}) {
         username: next.username,
         headless: next.headless === null ? undefined : next.headless,
         locale: next.locale || getLocale(),
+        convert: next.convert,
         path: filePath,
     };
 }
@@ -111,6 +157,7 @@ function getPublicSettings() {
         username: process.env.LOGA3_USERNAME || settings.username || '',
         headless,
         locale,
+        convert: settings.convert,
         source: envConfigured ? 'env' : (settings.username ? 'gui' : 'none'),
         settingsPath: getSettingsPath(),
     };
@@ -138,6 +185,7 @@ function applySettingsToEnv(env = process.env) {
 }
 
 module.exports = {
+    DEFAULT_CONVERT,
     getSettingsDir,
     getSettingsPath,
     loadSettings,
@@ -145,4 +193,5 @@ module.exports = {
     isConfigured,
     getPublicSettings,
     applySettingsToEnv,
+    normalizeConvert,
 };

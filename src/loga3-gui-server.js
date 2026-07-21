@@ -20,7 +20,7 @@ const {
     isConfigured,
     applySettingsToEnv,
 } = require('./loga3-settings');
-const { openPath, DEFAULT_CONVERTER_URL } = require('./loga3-cli-args');
+const { openPath } = require('./loga3-cli-args');
 const { t, getMessages, setLocale } = require('./loga3-i18n');
 
 applySettingsToEnv(process.env);
@@ -37,12 +37,16 @@ const APP_ROOT = PORTABLE_LAYOUT ? __dirname : PROJECT_ROOT;
 const GUI_DIR = PORTABLE_LAYOUT
     ? path.join(__dirname, 'gui')
     : path.join(PROJECT_ROOT, 'gui');
+const CONVERTER_DIR = path.join(APP_ROOT, 'converter');
 
 const MIME_TYPES = {
     '.html': 'text/html; charset=utf-8',
     '.css': 'text/css; charset=utf-8',
     '.js': 'application/javascript; charset=utf-8',
+    '.mjs': 'application/javascript; charset=utf-8',
     '.json': 'application/json; charset=utf-8',
+    '.pdf': 'application/pdf',
+    '.map': 'application/json; charset=utf-8',
 };
 
 let jobRunning = false;
@@ -87,11 +91,22 @@ function pushLog(line) {
     broadcast('log', { line: text, time: new Date().toISOString() });
 }
 
+function resolveStaticPath(pathname) {
+    if (pathname === '/converter' || pathname.startsWith('/converter/')) {
+        const rel = pathname === '/converter' ? '' : pathname.slice('/converter/'.length);
+        const filePath = path.normalize(path.join(CONVERTER_DIR, rel || 'README.md'));
+        if (!filePath.startsWith(CONVERTER_DIR)) return null;
+        return filePath;
+    }
+    const filePath = path.normalize(path.join(GUI_DIR, pathname === '/' ? 'index.html' : pathname));
+    if (!filePath.startsWith(GUI_DIR)) return null;
+    return filePath;
+}
+
 function serveStatic(req, res) {
     const pathname = new URL(req.url, `http://localhost:${PORT}`).pathname;
-    const filePath = path.join(GUI_DIR, pathname === '/' ? 'index.html' : pathname);
-
-    if (!filePath.startsWith(GUI_DIR)) {
+    const filePath = resolveStaticPath(pathname);
+    if (!filePath) {
         sendJson(res, 403, { error: 'Forbidden' });
         return;
     }
@@ -105,6 +120,48 @@ function serveStatic(req, res) {
         res.writeHead(200, { 'Content-Type': MIME_TYPES[ext] || 'text/plain; charset=utf-8' });
         res.end(content);
     });
+}
+
+function listDownloadedPdfs() {
+    const dir = getDownloadsDir();
+    let names = [];
+    try {
+        names = fs.readdirSync(dir);
+    } catch {
+        return [];
+    }
+    return names
+        .filter((name) => name.toLowerCase().endsWith('.pdf'))
+        .map((name) => {
+            const full = path.join(dir, name);
+            let size = 0;
+            let mtime = null;
+            try {
+                const st = fs.statSync(full);
+                size = st.size;
+                mtime = st.mtime.toISOString();
+            } catch {
+                // ignore
+            }
+            return { name, size, mtime };
+        })
+        .sort((a, b) => String(b.mtime || '').localeCompare(String(a.mtime || '')));
+}
+
+function safePdfPath(name) {
+    const base = path.basename(String(name || ''));
+    if (!base || base !== String(name) || !base.toLowerCase().endsWith('.pdf')) {
+        throw new Error('Ungültiger Dateiname');
+    }
+    const dir = path.resolve(getDownloadsDir());
+    const full = path.resolve(dir, base);
+    if (!full.startsWith(dir + path.sep) && full !== dir) {
+        throw new Error('Ungültiger Pfad');
+    }
+    if (!fs.existsSync(full)) {
+        throw new Error('Datei nicht gefunden');
+    }
+    return full;
 }
 
 function buildTargets(body) {
@@ -265,6 +322,7 @@ const server = http.createServer(async (req, res) => {
                 password: body.password,
                 headless: body.headless,
                 locale: body.locale,
+                convert: body.convert,
             });
             pushLog(t('logCredentialsSaved', { username: saved.username }));
             sendJson(res, 200, {
@@ -307,9 +365,36 @@ const server = http.createServer(async (req, res) => {
         }
 
         if (url.pathname === '/api/open-converter' && req.method === 'POST') {
-            const converterUrl = process.env.LOGA3_CONVERTER_URL || DEFAULT_CONVERTER_URL;
-            const ok = openPath(converterUrl);
-            sendJson(res, ok ? 200 : 500, { ok, url: converterUrl });
+            // Built-in convert tab — keep API for CLI/old clients; open local GUI convert view
+            const displayHost = HOST === '0.0.0.0' ? '127.0.0.1' : HOST;
+            const localUrl = `http://${displayHost}:${PORT}/#calendar`;
+            const ok = openPath(localUrl);
+            sendJson(res, ok ? 200 : 500, { ok, url: localUrl });
+            return;
+        }
+
+        if (url.pathname === '/api/downloads' && req.method === 'GET') {
+            sendJson(res, 200, {
+                dir: getDownloadsDir(),
+                files: listDownloadedPdfs(),
+            });
+            return;
+        }
+
+        if (url.pathname === '/api/downloads/file' && req.method === 'GET') {
+            const name = url.searchParams.get('name');
+            try {
+                const filePath = safePdfPath(name);
+                const content = fs.readFileSync(filePath);
+                res.writeHead(200, {
+                    'Content-Type': 'application/pdf',
+                    'Content-Length': content.length,
+                    'Content-Disposition': `inline; filename="${path.basename(filePath)}"`,
+                });
+                res.end(content);
+            } catch (error) {
+                sendJson(res, 404, { error: error.message });
+            }
             return;
         }
 

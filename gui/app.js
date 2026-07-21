@@ -9,7 +9,6 @@ const clearSelectionBtn = document.getElementById('clearSelectionBtn');
 const selectionInfo = document.getElementById('selectionInfo');
 const stopBtn = document.getElementById('stopBtn');
 const openDownloadsBtn = document.getElementById('openDownloadsBtn');
-const openConverterBtn = document.getElementById('openConverterBtn');
 const summaryEl = document.getElementById('summary');
 const monthsGrid = document.getElementById('monthsGrid');
 const logOutput = document.getElementById('logOutput');
@@ -25,6 +24,7 @@ const settingsCancelBtn = document.getElementById('settingsCancelBtn');
 const settingsError = document.getElementById('settingsError');
 const passwordHint = document.getElementById('passwordHint');
 const settingsTitle = document.getElementById('settingsTitle');
+const sectionCalendar = document.getElementById('sectionCalendar');
 
 let running = false;
 let configured = false;
@@ -47,12 +47,6 @@ function applyStaticI18n() {
   document.querySelectorAll('[data-i18n]').forEach((el) => {
     el.textContent = t(el.getAttribute('data-i18n'));
   });
-  document.querySelectorAll('[data-i18n-html]').forEach((el) => {
-    const key = el.getAttribute('data-i18n-html');
-    const raw = t(key);
-    // Keep ShiftPlanConverter emphasized when present in either language
-    el.innerHTML = raw.replace('ShiftPlanConverter', '<strong>ShiftPlanConverter</strong>');
-  });
   if (settingsLocale) {
     settingsLocale.options[0].textContent = t('langDe');
     settingsLocale.options[1].textContent = t('langEn');
@@ -61,6 +55,7 @@ function applyStaticI18n() {
 }
 
 function appendLog(line) {
+  if (!logOutput) return;
   logOutput.textContent += `${line}\n`;
   logOutput.scrollTop = logOutput.scrollHeight;
 }
@@ -78,6 +73,19 @@ function setRunning(value) {
 function updateSetupUi() {
   setupBanner.hidden = configured;
   setRunning(running);
+}
+
+function setFlowStep(step) {
+  document.querySelectorAll('.flow-step').forEach((el) => {
+    const n = Number(el.dataset.step);
+    el.classList.toggle('active', n === step);
+    el.classList.toggle('done', n < step);
+  });
+}
+
+function focusCalendar() {
+  setFlowStep(2);
+  sectionCalendar?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function updateSelectionInfo() {
@@ -126,6 +134,14 @@ async function loadSettingsIntoForm() {
   settingsUsername.value = data.username || '';
   settingsHeadless.checked = data.headless === true;
   settingsLocale.value = locale;
+  if (data.convert && typeof window.onConvertSettingsSaved === 'function') {
+    await window.onConvertSettingsSaved(data.convert);
+  } else if (data.convert) {
+    const showChk = document.getElementById('showMonthSummaryChk');
+    const richChk = document.getElementById('richEventDetailsChk');
+    if (showChk) showChk.checked = data.convert.showMonthSummary !== false;
+    if (richChk) richChk.checked = Boolean(data.convert.richEventDetails);
+  }
   applyStaticI18n();
   updateSetupUi();
   return data;
@@ -140,11 +156,8 @@ async function loadYears() {
 }
 
 function toggleMonth(month) {
-  if (selectedMonths.has(month)) {
-    selectedMonths.delete(month);
-  } else {
-    selectedMonths.add(month);
-  }
+  if (selectedMonths.has(month)) selectedMonths.delete(month);
+  else selectedMonths.add(month);
   updateSelectionInfo();
   renderInventory(inventoryData);
 }
@@ -215,6 +228,7 @@ async function startDownload(payload) {
     appendLog(`⚠️ ${t('errNeedCredentials')}`);
     return;
   }
+  setFlowStep(1);
   try {
     await api('/api/download', {
       method: 'POST',
@@ -245,17 +259,14 @@ function downloadMissing() {
     appendLog(`⚠️ ${t('errInventory')}`);
     return;
   }
-
   const months = inventoryData.months
     .filter((month) => !month.present)
     .map((month) => month.month)
     .sort((a, b) => a - b);
-
   if (!months.length) {
     appendLog(`ℹ️ ${t('errNoMissing', { year: yearSelect.value })}`);
     return;
   }
-
   startDownload({
     year: Number(yearSelect.value),
     months,
@@ -275,17 +286,32 @@ async function stopDownload() {
   }
 }
 
+async function runAutoConvert() {
+  for (let i = 0; i < 60 && typeof window.convertAllPdfs !== 'function'; i++) {
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  if (typeof window.convertAllPdfs !== 'function') {
+    appendLog(`⚠️ ${t('errConvertNotReady')}`);
+    return;
+  }
+  focusCalendar();
+  appendLog(`ℹ️ ${t('logAutoConvert')}`);
+  try {
+    await window.convertAllPdfs();
+  } catch (error) {
+    appendLog(`❌ ${error.message}`);
+  }
+}
+
 function connectEvents() {
   const source = new EventSource('/api/events');
 
   source.addEventListener('log', (event) => {
-    const data = JSON.parse(event.data);
-    appendLog(data.line);
+    appendLog(JSON.parse(event.data).line);
   });
 
   source.addEventListener('status', (event) => {
-    const data = JSON.parse(event.data);
-    setRunning(Boolean(data.running));
+    setRunning(Boolean(JSON.parse(event.data).running));
   });
 
   source.addEventListener('done', async (event) => {
@@ -295,30 +321,30 @@ function connectEvents() {
     updateSelectionInfo();
     if (data.ok) {
       await refreshInventory();
+      await runAutoConvert();
     } else {
       const year = Number(yearSelect.value);
-      const refreshed = await api(`/api/inventory?year=${year}`);
-      renderInventory(refreshed);
+      renderInventory(await api(`/api/inventory?year=${year}`));
     }
   });
 
-  source.onerror = () => {
-    appendLog(`⚠️ ${t('errReconnect')}`);
-  };
+  source.onerror = () => appendLog(`⚠️ ${t('errReconnect')}`);
 }
 
 settingsForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   settingsError.hidden = true;
   try {
+    const convert = typeof window.getConvertFormValues === 'function'
+      ? window.getConvertFormValues()
+      : undefined;
     const payload = {
       username: settingsUsername.value.trim(),
       headless: settingsHeadless.checked,
       locale: settingsLocale.value,
+      convert,
     };
-    if (settingsPassword.value) {
-      payload.password = settingsPassword.value;
-    }
+    if (settingsPassword.value) payload.password = settingsPassword.value;
     const result = await api('/api/settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -327,6 +353,9 @@ settingsForm.addEventListener('submit', async (event) => {
     if (result.messages) messages = result.messages;
     if (result.locale) locale = result.locale;
     configured = Boolean(result.configured);
+    if (result.convert && typeof window.onConvertSettingsSaved === 'function') {
+      await window.onConvertSettingsSaved(result.convert);
+    }
     applyStaticI18n();
     updateSetupUi();
     settingsModal.hidden = true;
@@ -338,7 +367,10 @@ settingsForm.addEventListener('submit', async (event) => {
 });
 
 yearSelect.addEventListener('change', refreshInventory);
-refreshBtn.addEventListener('click', () => refreshInventory(true));
+refreshBtn.addEventListener('click', async () => {
+  await refreshInventory(true);
+  if (typeof window.refreshConvertTab === 'function') window.refreshConvertTab();
+});
 settingsBtn.addEventListener('click', () => openSettings({ required: false }));
 setupBannerBtn.addEventListener('click', () => openSettings({ required: true }));
 settingsCancelBtn.addEventListener('click', closeSettings);
@@ -356,16 +388,9 @@ openDownloadsBtn.addEventListener('click', async () => {
     appendLog(`❌ ${error.message}`);
   }
 });
-openConverterBtn.addEventListener('click', async () => {
-  try {
-    const result = await api('/api/open-converter', { method: 'POST' });
-    appendLog(t('logConverter', { url: result.url }));
-  } catch (error) {
-    appendLog(`❌ ${error.message}`);
-  }
-});
 
 async function init() {
+  setFlowStep(1);
   const status = await api('/api/status');
   if (status.messages) messages = status.messages;
   if (status.locale) locale = status.locale;
@@ -378,9 +403,26 @@ async function init() {
   await loadYears();
   await refreshInventory();
   connectEvents();
-  if (!configured) {
-    openSettings({ required: true });
+
+  for (let i = 0; i < 40 && typeof window.onConvertSettingsSaved !== 'function'; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
   }
+  if (typeof window.onConvertSettingsSaved === 'function') {
+    const settings = await api('/api/settings');
+    if (settings.convert) await window.onConvertSettingsSaved(settings.convert);
+  }
+
+  // Existing entries → show calendar step as available
+  try {
+    const entries = JSON.parse(localStorage.getItem('parsedEntries') || '[]');
+    if (entries.length) setFlowStep(2);
+  } catch {
+    // ignore
+  }
+
+  if (location.hash === '#calendar') focusCalendar();
+
+  if (!configured) openSettings({ required: true });
 }
 
 init().catch((error) => appendLog(`❌ ${t('errStart', { message: error.message })}`));

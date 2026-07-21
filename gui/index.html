@@ -5,13 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LOGA3</title>
   <link rel="stylesheet" href="/style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" integrity="sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e" crossorigin="anonymous"></script>
+  <script src="https://apis.google.com/js/api.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
   <main class="app">
     <header class="header">
       <div>
-        <h1 data-i18n="appTitle">LOGA3 Zeitprotokolle</h1>
-        <p class="subtitle" data-i18n="appSubtitle">Lokale Übersicht &amp; Download</p>
+        <h1 data-i18n="appTitle">LOGA3</h1>
+        <p class="subtitle" data-i18n="appSubtitle">Dienstplan holen und in den Kalender bringen</p>
       </div>
       <div class="header-actions">
         <label>
@@ -23,74 +26,166 @@
       </div>
     </header>
 
+    <ol class="flow-steps" aria-label="Ablauf">
+      <li class="flow-step active" data-step="1"><span class="flow-num">1</span><span data-i18n="stepFetch">Monate laden</span></li>
+      <li class="flow-step" data-step="2"><span class="flow-num">2</span><span data-i18n="stepCalendar">Kalender</span></li>
+    </ol>
+
     <p id="setupBanner" class="setup-banner" hidden>
       <span data-i18n="setupBanner">Bitte einmal LOGA3-Benutzername und Passwort speichern — danach kannst du Monate laden.</span>
       <button id="setupBannerBtn" type="button" class="primary" data-i18n="setupNow">Jetzt einrichten</button>
     </p>
 
-    <section class="summary" id="summary"></section>
+    <!-- Step 1 -->
+    <section id="sectionFetch" class="flow-section">
+      <div class="section-head">
+        <h2 data-i18n="sectionFetchTitle">1 · Monate aus LOGA3</h2>
+        <p class="section-desc" data-i18n="sectionFetchDesc">Monate wählen und laden. Danach wird automatisch umgewandelt.</p>
+      </div>
 
-    <div class="selection-bar">
-      <span id="selectionInfo">0</span>
-      <button id="selectMissingBtn" type="button" data-i18n="selectMissing">Alle fehlenden auswählen</button>
-      <button id="clearSelectionBtn" type="button" data-i18n="clearSelection">Auswahl löschen</button>
-    </div>
+      <section class="summary" id="summary"></section>
 
-    <section class="months" id="monthsGrid"></section>
+      <div class="selection-bar">
+        <span id="selectionInfo">0</span>
+        <button id="selectMissingBtn" type="button" data-i18n="selectMissing">Alle fehlenden auswählen</button>
+        <button id="clearSelectionBtn" type="button" data-i18n="clearSelection">Auswahl löschen</button>
+      </div>
 
-    <section class="actions">
-      <button id="downloadSelectedBtn" type="button" class="primary" data-i18n="downloadSelected">Ausgewählte laden</button>
-      <button id="downloadMissingBtn" type="button" data-i18n="downloadMissing">Alle fehlenden laden</button>
-      <button id="downloadCurrentBtn" type="button" data-i18n="downloadCurrent">Aktuellen LOGA3-Monat</button>
-      <button id="stopBtn" type="button" class="danger" hidden data-i18n="stop">Abbrechen</button>
+      <section class="months" id="monthsGrid"></section>
+
+      <section class="actions">
+        <button id="downloadSelectedBtn" type="button" class="primary" data-i18n="downloadSelected">Ausgewählte laden</button>
+        <button id="downloadMissingBtn" type="button" data-i18n="downloadMissing">Alle fehlenden laden</button>
+        <button id="downloadCurrentBtn" type="button" data-i18n="downloadCurrent">Aktuellen Monat</button>
+        <button id="stopBtn" type="button" class="danger" hidden data-i18n="stop">Abbrechen</button>
+        <button id="openDownloadsBtn" type="button" data-i18n="openDownloads">PDF-Ordner</button>
+      </section>
+
+      <p class="hint" data-i18n="usageHint">Bei 2FA im Browserfenster bestätigen.</p>
     </section>
 
-    <section class="handoff">
-      <p class="hint" style="margin:0" data-i18n-html="handoffHint">
-        Danach: PDFs in <strong>ShiftPlanConverter</strong> öffnen (Kalender / .ics).
-      </p>
-      <button id="openDownloadsBtn" type="button" data-i18n="openDownloads">PDF-Ordner öffnen</button>
-      <button id="openConverterBtn" type="button" data-i18n="openConverter">Converter öffnen</button>
+    <!-- Step 2 -->
+    <section id="sectionCalendar" class="flow-section">
+      <div class="section-head">
+        <h2 data-i18n="sectionCalendarTitle">2 · In den Kalender</h2>
+        <p class="section-desc">
+          <span data-i18n="convertUsingMapping">Mapping:</span>
+          <strong id="convertMappingSummary">—</strong>
+          <button id="editMappingBtn" type="button" class="linkish" data-i18n="editInSettings">ändern</button>
+        </p>
+      </div>
+
+      <p id="convertStatus" class="convert-status" hidden></p>
+
+      <details class="collapsible month-summary-details" id="monthSummaryDetails">
+        <summary data-i18n="monthSummaryToggle">Monatsübersicht (AZK)</summary>
+        <div id="monthSummaryCard" class="month-summary"></div>
+      </details>
+
+      <div class="convert-card">
+        <div id="missingShiftsContainer" class="missing-shifts" hidden>
+          <p data-i18n="convertMissingShifts">Unbekannte Zeiten (nicht im Mapping):</p>
+          <div id="missingShiftsList" class="missing-shifts-list"></div>
+        </div>
+        <div id="previewContent" class="preview-table-wrap">
+          <p class="hint" data-i18n="convertPreviewEmpty">Noch keine Einträge — zuerst Monate laden.</p>
+        </div>
+      </div>
+
+      <div class="export-bar">
+        <button id="icsExportBtn" type="button" class="primary" disabled data-i18n="exportIcs">.ics exportieren</button>
+        <button id="reconvertBtn" type="button" data-i18n="convertRun">Erneut umwandeln</button>
+      </div>
+
+      <div class="google-sync-card convert-card">
+        <h3 data-i18n="convertGoogle">Google Kalender</h3>
+        <div class="export-bar google-bar">
+          <button id="connectGoogleBtn" type="button" data-i18n="connectGoogle">Mit Google verbinden</button>
+          <label id="calendarSelectWrap" class="calendar-select-wrap" hidden>
+            <span data-i18n="calendarLabel">Kalender</span>
+            <select id="calendarSelect" disabled></select>
+          </label>
+          <button id="createCalendarBtn" type="button" hidden disabled data-i18n="createCalendar">Neuer Kalender</button>
+          <button id="syncBtn" type="button" class="primary" hidden disabled data-i18n="syncCalendar">Kalender synchronisieren</button>
+        </div>
+        <p id="googleSyncHint" class="hint" data-i18n="googleSyncHint">Empfohlen: eigenen Kalender „Dienstplan“. Sync löscht im gewählten Kalender alle Termine im Schicht-Zeitraum und legt sie neu an.</p>
+      </div>
     </section>
 
-    <p class="hint" data-i18n="usageHint">
-      Monate anklicken, dann Ausgewählte laden. Bei 2FA im Browserfenster bestätigen.
-    </p>
+    <details class="collapsible" id="pdfDetails">
+      <summary data-i18n="advancedPdfs">Erweitert: PDFs manuell wählen</summary>
+      <div class="convert-pdf-actions">
+        <button id="refreshPdfsBtn" type="button" data-i18n="refresh">Aktualisieren</button>
+        <button id="selectAllPdfsBtn" type="button" data-i18n="selectAllPdfs">Alle auswählen</button>
+        <button id="convertBtn" type="button" class="primary" data-i18n="convertRun">Umwandeln</button>
+      </div>
+      <div id="pdfList" class="pdf-list"></div>
+      <p id="pdfListEmpty" class="hint" hidden data-i18n="convertNoPdfs">Keine PDFs im Download-Ordner.</p>
+    </details>
 
-    <section class="log-panel">
-      <h2 data-i18n="liveLog">Live-Log</h2>
+    <details class="collapsible log-collapsible">
+      <summary data-i18n="liveLog">Live-Log</summary>
       <pre id="logOutput"></pre>
-    </section>
+    </details>
   </main>
 
   <div id="settingsModal" class="modal" hidden>
-    <div class="modal-card" role="dialog" aria-labelledby="settingsTitle">
-      <h2 id="settingsTitle" data-i18n="settingsTitle">LOGA3-Zugang</h2>
-      <p class="modal-text" data-i18n="settingsIntro">
-        Einmal eingeben und speichern. Das Passwort wird nur lokal auf diesem Rechner abgelegt
-        (nicht in der Cloud).
-      </p>
+    <div class="modal-card modal-card-wide" role="dialog" aria-labelledby="settingsTitle">
+      <h2 id="settingsTitle" data-i18n="settingsTitle">Einstellungen</h2>
       <form id="settingsForm">
-        <label>
-          <span data-i18n="username">Benutzername</span>
-          <input id="settingsUsername" name="username" autocomplete="username" required>
-        </label>
-        <label>
-          <span data-i18n="password">Passwort</span>
-          <input id="settingsPassword" name="password" type="password" autocomplete="current-password" placeholder="••••••••">
-        </label>
-        <p id="passwordHint" class="field-hint" hidden data-i18n="passwordHint">Leer lassen = bisheriges Passwort behalten</p>
-        <label class="checkbox-row">
-          <input id="settingsHeadless" type="checkbox">
-          <span data-i18n="headless">Browser verstecken (Headless) — für Server; zum Mitgucken auslassen</span>
-        </label>
-        <label>
-          <span data-i18n="language">Sprache</span>
-          <select id="settingsLocale">
-            <option value="de">Deutsch</option>
-            <option value="en">English</option>
-          </select>
-        </label>
+        <fieldset class="settings-section">
+          <legend data-i18n="settingsLogin">LOGA3-Zugang</legend>
+          <p class="modal-text" data-i18n="settingsIntro">
+            Einmal eingeben und speichern. Das Passwort wird nur lokal auf diesem Rechner abgelegt
+            (nicht in der Cloud).
+          </p>
+          <label>
+            <span data-i18n="username">Benutzername</span>
+            <input id="settingsUsername" name="username" autocomplete="username" required>
+          </label>
+          <label>
+            <span data-i18n="password">Passwort</span>
+            <input id="settingsPassword" name="password" type="password" autocomplete="current-password" placeholder="••••••••">
+          </label>
+          <p id="passwordHint" class="field-hint" hidden data-i18n="passwordHint">Leer lassen = bisheriges Passwort behalten</p>
+          <label class="checkbox-row">
+            <input id="settingsHeadless" type="checkbox">
+            <span data-i18n="headless">Browser verstecken (Headless) — für Server; zum Mitgucken auslassen</span>
+          </label>
+          <label>
+            <span data-i18n="language">Sprache</span>
+            <select id="settingsLocale">
+              <option value="de">Deutsch</option>
+              <option value="en">English</option>
+            </select>
+          </label>
+        </fieldset>
+
+        <fieldset class="settings-section">
+          <legend data-i18n="convertMapping">Schicht-Mapping</legend>
+          <p class="modal-text" data-i18n="settingsMappingIntro">Bleibt gespeichert — du wechselst das nur, wenn Station/Beruf sich ändert.</p>
+          <label>
+            <span data-i18n="convertGroup">Berufsgruppe</span>
+            <select id="settingsGroup"></select>
+          </label>
+          <label>
+            <span data-i18n="convertArea">Bereich</span>
+            <select id="settingsArea"></select>
+          </label>
+          <label>
+            <span data-i18n="convertPreset">Preset</span>
+            <select id="settingsPreset"></select>
+          </label>
+          <label class="checkbox-row">
+            <input id="showMonthSummaryChk" type="checkbox" checked>
+            <span data-i18n="convertShowSummary">Monatsübersicht (AZK) anzeigen</span>
+          </label>
+          <label class="checkbox-row">
+            <input id="richEventDetailsChk" type="checkbox">
+            <span data-i18n="convertRichDetails">Rich-Details in Kalender-Events</span>
+          </label>
+        </fieldset>
+
         <p id="settingsError" class="form-error" hidden></p>
         <div class="modal-actions">
           <button id="settingsCancelBtn" type="button" data-i18n="cancel">Abbrechen</button>
@@ -101,5 +196,6 @@
   </div>
 
   <script src="/app.js"></script>
+  <script type="module" src="/convert-tab.js"></script>
 </body>
 </html>

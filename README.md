@@ -1,10 +1,27 @@
 # LOGA3 time sheets
 
-Downloads Zeitprotokoll PDFs from LOGA3 through a local web UI.
+All-in-one desktop app: **fetch** Zeitprotokoll PDFs from LOGA3 → **convert** to shifts → **export `.ics`** or **sync Google Calendar**.
 
 End users do **not** need a `.env` file — save login credentials in the GUI.
 
 [Deutsch](README.de.md)
+
+## Downloads
+
+Desktop packages (Chromium included — large files):
+
+[![Latest](https://img.shields.io/github/v/release/fr4iser90/LOGA3-Automation?label=latest)](https://github.com/fr4iser90/LOGA3-Automation/releases/latest)
+[![Windows](https://img.shields.io/badge/download-Windows-0078D4?logo=windows&logoColor=white)](https://github.com/fr4iser90/LOGA3-Automation/releases/latest/download/loga3-win-x64.zip)
+[![Linux](https://img.shields.io/badge/download-Linux%20.tar.gz-FCC624?logo=linux&logoColor=black)](https://github.com/fr4iser90/LOGA3-Automation/releases/latest/download/loga3-linux-x64.tar.gz)
+[![AppImage](https://img.shields.io/badge/download-AppImage-2CA5E0?logo=linux&logoColor=white)](https://github.com/fr4iser90/LOGA3-Automation/releases/latest)
+
+| Platform | File |
+|----------|------|
+| Windows | [`loga3-win-x64.zip`](https://github.com/fr4iser90/LOGA3-Automation/releases/latest/download/loga3-win-x64.zip) — unzip, run `Loga3.exe` |
+| Linux | [`loga3-linux-x64.tar.gz`](https://github.com/fr4iser90/LOGA3-Automation/releases/latest/download/loga3-linux-x64.tar.gz) |
+| Linux AppImage | on the [latest release](https://github.com/fr4iser90/LOGA3-Automation/releases/latest) (`Loga3-*-x86_64.AppImage`) |
+
+PDF-only (no LOGA3 login): [shift.fr4iser.com](https://shift.fr4iser.com).
 
 ## Quick start
 
@@ -16,10 +33,10 @@ End users do **not** need a `.env` file — save login credentials in the GUI.
    npm run gui
    ```
 2. Open http://127.0.0.1:3847
-3. Enter username + password → **Save**
-4. Select months → **Download selected**
+3. Select months → **Download selected** — conversion runs automatically
+4. Export **`.ics`** or connect **Google Calendar**
 
-Credentials are stored locally in `data/loga3-settings.json` (AppImage: `loga3-data/` next to the file).
+Credentials stay local in `data/loga3-settings.json` (AppImage: `loga3-data/` next to the file). The converter never sees LOGA3 credentials.
 
 ### Docker
 
@@ -34,10 +51,9 @@ docker compose logs -f
 docker compose down
 ```
 
-### CLI (developers / ShiftPlanConverter handoff)
+### CLI (developers)
 
 ```bash
-# Engine API for PDF → calendar converter
 npx loga3 fetch --months 2026-05,2026-06 --out ./pdfs
 npx loga3 fetch --last 3 --out ./pdfs --open-folder --open-converter
 
@@ -45,7 +61,7 @@ npm run download:last3
 npm run download:next3
 ```
 
-Flow: **Loga3 fetches PDFs** → drop them into [ShiftPlanConverter](https://shift.fr4iser.com) (or use `--open-converter`). Loga3 does not embed the converter; the converter never sees LOGA3 credentials.
+`--open-converter` opens the local calendar section (`http://127.0.0.1:3847/#calendar`).
 
 Optional instead of the GUI: `cp .env.example .env` and set `LOGA3_USERNAME` / `LOGA3_PASSWORD`.
 
@@ -53,8 +69,8 @@ Optional instead of the GUI: `cp .env.example .env` and set `LOGA3_USERNAME` / `
 
 | Script | Purpose |
 |--------|---------|
-| `gui` | Web UI (port 3847) |
-| `fetch` | `loga3 fetch` — months + `--out` for converter handoff |
+| `gui` | Web UI (port 3847) — fetch → calendar |
+| `fetch` | `loga3 fetch` — months + `--out` |
 | `download` / `download:lastN` / `download:nextN` | Download PDFs |
 | `debug:content` | Navigate months without export |
 | `test` | Unit tests |
@@ -65,7 +81,8 @@ Optional instead of the GUI: `cp .env.example .env` and set `LOGA3_USERNAME` / `
 ```
 Loga3/
   src/          App core
-  gui/          Web UI
+  gui/          Web UI (single flow)
+  converter/    PDF → shifts → ICS / Google (shared core)
   docker/       Dockerfile + compose
   scripts/      Desktop packaging
   test/         Tests
