@@ -246,6 +246,35 @@ button.danger {
   font-weight: 500;
 }
 
+.update-notes-wrap {
+  margin: 12px 0;
+}
+
+.update-notes-wrap h3 {
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+}
+
+.update-notes {
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  font-size: 0.82rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.update-assets {
+  margin: 8px 0 0;
+  padding-left: 1.2rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
 .support-request {
   margin-top: 16px;
 }

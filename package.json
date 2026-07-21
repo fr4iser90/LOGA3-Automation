@@ -1,6 +1,6 @@
 {
   "name": "loga3",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "main": "src/loga3-automation.js",
   "bin": {
     "loga3": "bin/loga3.js"

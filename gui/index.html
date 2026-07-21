@@ -22,6 +22,7 @@
           <select id="yearSelect"></select>
         </label>
         <button id="settingsBtn" type="button" data-i18n="settings">Einstellungen</button>
+        <button id="checkUpdateBtn" type="button" data-i18n="checkUpdate">Update</button>
         <button id="refreshBtn" type="button" data-i18n="refresh">Aktualisieren</button>
       </div>
     </header>
@@ -205,7 +206,8 @@
 
         <fieldset class="settings-section">
           <legend data-i18n="convertMapping">Schicht-Mapping</legend>
-          <p class="modal-text" data-i18n="settingsMappingIntro">Bleibt gespeichert — du wechselst das nur, wenn Station/Beruf sich ändert.</p>
+          <p class="modal-text" data-i18n="settingsMappingIntro">Nur freigeschaltete Bereiche erscheinen hier. Andere Stationen/Berufe: „Unterstützung anfragen“.</p>
+          <p id="hospitalSupportHint" class="field-hint"></p>
           <label>
             <span data-i18n="convertHospital">Krankenhaus</span>
             <select id="settingsHospital"></select>
@@ -234,11 +236,20 @@
 
         <fieldset class="settings-section">
           <legend data-i18n="packsTitle">Krankenhaus-Packs</legend>
-          <p class="modal-text" data-i18n="packsIntro">ZIP mit config.json, mappings/ und optional parser.js installieren — ohne neue App-Version.</p>
+          <p class="modal-text" data-i18n="packsIntro">
+            St. Elisabeth (Anästhesie) ist eingebaut. Weitere Kliniken oder Mapping-Hotfixes als Pack —
+            lokal per ZIP oder aus dem GitHub-Katalog (ohne neue App-Version).
+          </p>
+          <div class="export-bar">
+            <button id="packsCatalogBtn" type="button" data-i18n="packsCatalogLoad">Packs von GitHub laden</button>
+            <a id="packsGithubLink" class="linkish" href="https://github.com/fr4iser90/LOGA3-Automation/tree/main/packs" target="_blank" rel="noopener" data-i18n="packsGithubOpen">Packs auf GitHub</a>
+          </div>
+          <div id="packsCatalogList" class="packs-list"></div>
           <label class="file-row">
-            <span data-i18n="packsInstall">Pack (.zip) installieren</span>
+            <span data-i18n="packsInstall">Oder ZIP manuell installieren</span>
             <input id="packInstallInput" type="file" accept=".zip,application/zip">
           </label>
+          <p class="field-hint" data-i18n="packsInstalledLabel">Installiert auf diesem Rechner:</p>
           <div id="packsList" class="packs-list"></div>
           <p id="packsStatus" class="field-hint"></p>
         </fieldset>
@@ -249,6 +260,24 @@
           <button type="submit" class="primary" data-i18n="save">Speichern</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <div id="updateModal" class="modal" hidden>
+    <div class="modal-card modal-card-wide" role="dialog" aria-labelledby="updateTitle">
+      <h2 id="updateTitle" data-i18n="updateTitle">App-Update</h2>
+      <p id="updateStatus" class="modal-text"></p>
+      <p id="updateVersions" class="field-hint"></p>
+      <div id="updateNotesWrap" class="update-notes-wrap" hidden>
+        <h3 data-i18n="updateNotesHeading">Was ist neu?</h3>
+        <pre id="updateNotes" class="update-notes"></pre>
+      </div>
+      <ul id="updateAssets" class="update-assets" hidden></ul>
+      <p class="field-hint" data-i18n="updateConsentHint">Download nur nach deiner Zustimmung — nichts wird still im Hintergrund installiert.</p>
+      <div class="modal-actions">
+        <button id="updateLaterBtn" type="button" data-i18n="updateLater">Später</button>
+        <button id="updateOpenBtn" type="button" class="primary" hidden data-i18n="updateOpen">Release öffnen / Download</button>
+      </div>
     </div>
   </div>
 

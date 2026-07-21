@@ -9,7 +9,7 @@ const DEFAULT_CONVERT = {
     hospital: 'st-elisabeth-leipzig',
     group: 'pflege',
     area: 'op-bereich',
-    preset: '',
+    preset: 'Anästhesie',
     showMonthSummary: true,
     richEventDetails: false,
     // Public OAuth web client (ShiftPlanConverter) — not a secret

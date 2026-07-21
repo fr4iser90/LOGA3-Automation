@@ -1,6 +1,15 @@
 const yearSelect = document.getElementById('yearSelect');
 const refreshBtn = document.getElementById('refreshBtn');
 const settingsBtn = document.getElementById('settingsBtn');
+const checkUpdateBtn = document.getElementById('checkUpdateBtn');
+const updateModal = document.getElementById('updateModal');
+const updateStatus = document.getElementById('updateStatus');
+const updateVersions = document.getElementById('updateVersions');
+const updateNotesWrap = document.getElementById('updateNotesWrap');
+const updateNotes = document.getElementById('updateNotes');
+const updateAssets = document.getElementById('updateAssets');
+const updateLaterBtn = document.getElementById('updateLaterBtn');
+const updateOpenBtn = document.getElementById('updateOpenBtn');
 const downloadSelectedBtn = document.getElementById('downloadSelectedBtn');
 const downloadMissingBtn = document.getElementById('downloadMissingBtn');
 const downloadCurrentBtn = document.getElementById('downloadCurrentBtn');
@@ -31,16 +40,100 @@ let configured = false;
 let inventoryData = null;
 let messages = {};
 let locale = 'de';
+let appVersion = '';
+let pendingUpdateUrl = '';
+let lastCheckedLatest = '';
 const selectedMonths = new Set();
+const UPDATE_DISMISS_KEY = 'loga3UpdateDismissed';
 
-function t(key, vars = {}) {
-  let text = messages[key] || key;
-  for (const [name, value] of Object.entries(vars)) {
-    text = text.replace(new RegExp(`\\{${name}\\}`, 'g'), String(value));
-  }
-  return text;
+function closeUpdateModal() {
+  if (updateModal) updateModal.hidden = true;
+  pendingUpdateUrl = '';
 }
-window.t = t;
+
+function openUpdateModal() {
+  if (updateModal) updateModal.hidden = false;
+}
+
+async function checkForUpdates({ interactive = true } = {}) {
+  if (interactive) openUpdateModal();
+  if (updateStatus) updateStatus.textContent = t('updateChecking');
+  if (updateVersions) updateVersions.textContent = '';
+  if (updateNotesWrap) updateNotesWrap.hidden = true;
+  if (updateAssets) {
+    updateAssets.hidden = true;
+    updateAssets.innerHTML = '';
+  }
+  if (updateOpenBtn) updateOpenBtn.hidden = true;
+  pendingUpdateUrl = '';
+
+  try {
+    const data = await api('/api/updates/check');
+    if (data.currentVersion) appVersion = data.currentVersion;
+
+    if (data.error) {
+      if (interactive) {
+        if (updateStatus) updateStatus.textContent = t('updateError', { message: data.error });
+      }
+      return data;
+    }
+
+    if (!data.updateAvailable) {
+      if (interactive) {
+        if (updateStatus) {
+          updateStatus.textContent = t('updateUpToDate', { version: data.currentVersion || appVersion });
+        }
+      }
+      return data;
+    }
+
+    const dismissed = localStorage.getItem(UPDATE_DISMISS_KEY);
+    if (!interactive && dismissed === data.latestVersion) {
+      return data;
+    }
+
+    openUpdateModal();
+    if (updateStatus) {
+      updateStatus.textContent = t('updateAvailable', {
+        latest: data.latestVersion,
+        current: data.currentVersion,
+      });
+    }
+    if (updateVersions) {
+      updateVersions.textContent = t('updateVersionsLabel', {
+        current: data.currentVersion,
+        latest: data.latestVersion,
+      });
+    }
+    if (updateNotesWrap && updateNotes) {
+      updateNotesWrap.hidden = false;
+      updateNotes.textContent = data.releaseNotes || t('updateNoNotes');
+    }
+    if (updateAssets && data.assets?.length) {
+      updateAssets.hidden = false;
+      updateAssets.innerHTML = data.assets
+        .map((a) => `<li><code>${escapeHtmlApp(a.name)}</code></li>`)
+        .join('');
+    }
+    pendingUpdateUrl = data.releaseUrl || '';
+    lastCheckedLatest = data.latestVersion || '';
+    if (updateOpenBtn) updateOpenBtn.hidden = !pendingUpdateUrl;
+    return data;
+  } catch (error) {
+    if (interactive && updateStatus) {
+      updateStatus.textContent = t('updateError', { message: error.message });
+      openUpdateModal();
+    }
+    return null;
+  }
+}
+
+function escapeHtmlApp(str) {
+  if (str == null) return '';
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
 
 function applyStaticI18n() {
   document.documentElement.lang = locale;
@@ -373,6 +466,17 @@ refreshBtn.addEventListener('click', async () => {
   if (typeof window.refreshConvertTab === 'function') window.refreshConvertTab();
 });
 settingsBtn.addEventListener('click', () => openSettings({ required: false }));
+checkUpdateBtn?.addEventListener('click', () => checkForUpdates({ interactive: true }));
+updateLaterBtn?.addEventListener('click', () => {
+  if (lastCheckedLatest) localStorage.setItem(UPDATE_DISMISS_KEY, lastCheckedLatest);
+  closeUpdateModal();
+});
+updateOpenBtn?.addEventListener('click', () => {
+  if (pendingUpdateUrl) window.open(pendingUpdateUrl, '_blank', 'noopener,noreferrer');
+});
+updateModal?.addEventListener('click', (e) => {
+  if (e.target === updateModal) closeUpdateModal();
+});
 setupBannerBtn.addEventListener('click', () => openSettings({ required: true }));
 settingsCancelBtn.addEventListener('click', closeSettings);
 downloadSelectedBtn.addEventListener('click', downloadSelected);
@@ -395,8 +499,16 @@ async function init() {
   const status = await api('/api/status');
   if (status.messages) messages = status.messages;
   if (status.locale) locale = status.locale;
+  if (status.version) appVersion = status.version;
   configured = Boolean(status.configured);
   applyStaticI18n();
+  if (appVersion) {
+    const sub = document.querySelector('.subtitle');
+    if (sub && !sub.dataset.versioned) {
+      sub.dataset.versioned = '1';
+      sub.textContent = `${sub.textContent} · ${t('appVersionLabel', { version: appVersion })}`;
+    }
+  }
   setRunning(status.running);
   updateSelectionInfo();
   updateSetupUi();
@@ -424,6 +536,9 @@ async function init() {
   if (location.hash === '#calendar') focusCalendar();
 
   if (!configured) openSettings({ required: true });
+
+  // Sanfter Check: nur Dialog wenn neuere Version (nicht dismissed)
+  checkForUpdates({ interactive: false }).catch(() => {});
 }
 
 init().catch((error) => appendLog(`❌ ${t('errStart', { message: error.message })}`));

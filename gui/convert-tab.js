@@ -37,6 +37,7 @@ const BUILTIN_GOOGLE_CLIENT_ID =
 
 const els = {
     hospital: document.getElementById('settingsHospital'),
+    hospitalHint: document.getElementById('hospitalSupportHint'),
     group: document.getElementById('settingsGroup'),
     area: document.getElementById('settingsArea'),
     preset: document.getElementById('settingsPreset'),
@@ -70,6 +71,9 @@ const els = {
     supportStatus: document.getElementById('supportStatus'),
     packInstallInput: document.getElementById('packInstallInput'),
     packsList: document.getElementById('packsList'),
+    packsCatalogList: document.getElementById('packsCatalogList'),
+    packsCatalogBtn: document.getElementById('packsCatalogBtn'),
+    packsGithubLink: document.getElementById('packsGithubLink'),
     packsStatus: document.getElementById('packsStatus'),
 };
 
@@ -80,7 +84,7 @@ let convertPrefs = {
     hospital: HOSPITAL_DEFAULT,
     group: 'pflege',
     area: 'op-bereich',
-    preset: '',
+    preset: 'Anästhesie',
     showMonthSummary: true,
     richEventDetails: false,
     googleClientId: BUILTIN_GOOGLE_CLIENT_ID,
@@ -230,6 +234,68 @@ async function refreshPacksList() {
         });
     } catch (e) {
         if (els.packsStatus) els.packsStatus.textContent = ti('packsError', { message: e.message });
+    }
+}
+
+async function loadPacksCatalog() {
+    if (els.packsStatus) els.packsStatus.textContent = '…';
+    try {
+        const data = await api('/api/packs/catalog');
+        if (data.githubRepo && els.packsGithubLink) {
+            els.packsGithubLink.href = `${String(data.githubRepo).replace(/\/$/, '')}/tree/main/packs`;
+        }
+        const packs = data.packs || [];
+        if (!els.packsCatalogList) return;
+        if (!packs.length) {
+            els.packsCatalogList.innerHTML = `<p class="field-hint">${escapeHtml(ti('packsCatalogEmpty'))}</p>`;
+            if (data.note) {
+                els.packsCatalogList.innerHTML += `<p class="field-hint">${escapeHtml(data.note)}</p>`;
+            }
+            if (els.packsStatus) els.packsStatus.textContent = ti('packsCatalogOk', { count: 0 });
+            return;
+        }
+        els.packsCatalogList.innerHTML = packs.map((p) => `
+          <div class="pack-row">
+            <span>
+              <strong>${escapeHtml(p.name || p.id)}</strong>
+              ${p.version ? `<code>v${escapeHtml(p.version)}</code>` : ''}
+              ${p.description ? `<br><span class="field-hint">${escapeHtml(p.description)}</span>` : ''}
+            </span>
+            <button type="button" class="pack-catalog-install primary" data-url="${escapeHtml(p.zipUrl || '')}" ${p.zipUrl ? '' : 'disabled'}>
+              ${escapeHtml(ti('packsCatalogInstall'))}
+            </button>
+          </div>`).join('');
+        els.packsCatalogList.querySelectorAll('.pack-catalog-install').forEach((btn) => {
+            btn.addEventListener('click', async () => {
+                const zipUrl = btn.dataset.url;
+                if (!zipUrl) return;
+                btn.disabled = true;
+                try {
+                    const result = await api('/api/packs/install-url', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ zipUrl }),
+                    });
+                    if (els.packsStatus) els.packsStatus.textContent = ti('packsInstalled', { name: result.name || result.id });
+                    await fillHospitals();
+                    await refreshPacksList();
+                    if (result.id && els.hospital) {
+                        els.hospital.value = result.id;
+                        await switchHospital(result.id);
+                    }
+                } catch (e) {
+                    if (els.packsStatus) els.packsStatus.textContent = ti('packsError', { message: e.message });
+                } finally {
+                    btn.disabled = false;
+                }
+            });
+        });
+        if (els.packsStatus) els.packsStatus.textContent = ti('packsCatalogOk', { count: packs.length });
+    } catch (e) {
+        if (els.packsStatus) els.packsStatus.textContent = ti('packsError', { message: e.message });
+        if (els.packsCatalogList) {
+            els.packsCatalogList.innerHTML = `<p class="field-hint">${escapeHtml(e.message || String(e))}</p>`;
+        }
     }
 }
 
@@ -493,15 +559,23 @@ async function switchHospital(hospitalId) {
 
 async function fillGroups() {
     if (!hospitalConfig || !els.group) return;
+    // Nur Gruppen mit mindestens einem freigeschalteten Bereich
+    const groups = (hospitalConfig.groups || []).filter((g) =>
+        (g.areas || []).some((a) => a.supported !== false)
+    );
     suppressMappingEvents = true;
-    els.group.innerHTML = hospitalConfig.groups
+    els.group.innerHTML = groups
         .map((g) => `<option value="${escapeHtml(g.id)}">${escapeHtml(g.label)}</option>`)
         .join('');
     if (convertPrefs.group) els.group.value = convertPrefs.group;
     if (![...els.group.options].some((o) => o.value === els.group.value) && els.group.options[0]) {
         els.group.selectedIndex = 0;
+        convertPrefs.group = els.group.value;
     }
     suppressMappingEvents = false;
+    if (els.hospitalHint) {
+        els.hospitalHint.textContent = hospitalConfig.hint || '';
+    }
     await fillAreas();
 }
 
@@ -509,13 +583,15 @@ async function fillAreas() {
     if (!hospitalConfig || !els.area) return;
     const groupId = els.group?.value || convertPrefs.group;
     const group = hospitalConfig.groups.find((g) => g.id === groupId);
+    const areas = (group?.areas || []).filter((a) => a.supported !== false);
     suppressMappingEvents = true;
-    els.area.innerHTML = (group?.areas || [])
-        .map((a) => `<option value="${escapeHtml(a.id)}" data-mapping="${escapeHtml(a.mapping)}">${escapeHtml(a.label)}</option>`)
+    els.area.innerHTML = areas
+        .map((a) => `<option value="${escapeHtml(a.id)}" data-mapping="${escapeHtml(a.mapping)}" data-default-preset="${escapeHtml(a.defaultPreset || '')}">${escapeHtml(a.label)}</option>`)
         .join('');
     if (convertPrefs.area) els.area.value = convertPrefs.area;
     if (![...els.area.options].some((o) => o.value === els.area.value) && els.area.options[0]) {
         els.area.selectedIndex = 0;
+        convertPrefs.area = els.area.value;
     }
     suppressMappingEvents = false;
     await loadCurrentMapping();
@@ -536,17 +612,25 @@ async function loadCurrentMapping() {
     if (currentMapping.colors) {
         localStorage.setItem('shiftColors', JSON.stringify(currentMapping.colors));
     }
-    const presets = Object.keys(currentMapping.presets || {});
+    // Nur Presets mit mindestens einem isValidated: true
+    const presetNames = Object.entries(currentMapping.presets || {})
+        .filter(([, shifts]) => Object.values(shifts || {}).some((v) => v && v.isValidated === true))
+        .map(([name]) => name);
+
     suppressMappingEvents = true;
     if (els.preset) {
-        els.preset.innerHTML = presets
+        els.preset.innerHTML = presetNames
             .map((p) => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`)
             .join('');
-        if (convertPrefs.preset && presets.includes(convertPrefs.preset)) {
+        const preferred = opt?.dataset?.defaultPreset || convertPrefs.preset;
+        if (preferred && presetNames.includes(preferred)) {
+            els.preset.value = preferred;
+            convertPrefs.preset = preferred;
+        } else if (convertPrefs.preset && presetNames.includes(convertPrefs.preset)) {
             els.preset.value = convertPrefs.preset;
-        } else if (presets[0]) {
-            els.preset.value = presets[0];
-            convertPrefs.preset = presets[0];
+        } else if (presetNames[0]) {
+            els.preset.value = presetNames[0];
+            convertPrefs.preset = presetNames[0];
         }
     }
     suppressMappingEvents = false;
@@ -969,6 +1053,7 @@ export async function initConvertTab() {
         await installPackFile(file);
         els.packInstallInput.value = '';
     });
+    els.packsCatalogBtn?.addEventListener('click', () => loadPacksCatalog());
 
     await refreshPdfList();
     await refreshPacksList();

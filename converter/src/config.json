@@ -1,5 +1,6 @@
 {
     "maintainerEmail": "support@fr4iser.com",
     "githubRepo": "https://github.com/fr4iser90/LOGA3-Automation",
+    "packsManifestUrl": "https://raw.githubusercontent.com/fr4iser90/LOGA3-Automation/main/packs/manifest.json",
     "googleClientId": "443643010945-l4r4n5t6vaj93tcqs8jlbvccltd06kaf.apps.googleusercontent.com"
 }

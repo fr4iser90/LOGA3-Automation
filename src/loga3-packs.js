@@ -214,6 +214,67 @@ function deletePack(id) {
     return { ok: true, id: clean };
 }
 
+function fetchUrlBuffer(urlString, { maxRedirects = 5, maxBytes = 40 * 1024 * 1024 } = {}) {
+    const https = require('https');
+    const http = require('http');
+    return new Promise((resolve, reject) => {
+        const getter = urlString.startsWith('https') ? https : http;
+        const req = getter.get(urlString, { headers: { 'User-Agent': 'LOGA3-Automation' } }, (res) => {
+            if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location && maxRedirects > 0) {
+                fetchUrlBuffer(res.headers.location, { maxRedirects: maxRedirects - 1, maxBytes })
+                    .then(resolve, reject);
+                return;
+            }
+            if (res.statusCode !== 200) {
+                reject(new Error(`Download fehlgeschlagen (${res.statusCode})`));
+                res.resume();
+                return;
+            }
+            const chunks = [];
+            let size = 0;
+            res.on('data', (chunk) => {
+                size += chunk.length;
+                if (size > maxBytes) {
+                    reject(new Error('Download zu groß'));
+                    req.destroy();
+                    return;
+                }
+                chunks.push(chunk);
+            });
+            res.on('end', () => resolve(Buffer.concat(chunks)));
+            res.on('error', reject);
+        });
+        req.on('error', reject);
+    });
+}
+
+async function fetchPacksCatalog(manifestUrl) {
+    if (!manifestUrl) throw new Error('Keine packsManifestUrl konfiguriert');
+    const buf = await fetchUrlBuffer(manifestUrl, { maxBytes: 2 * 1024 * 1024 });
+    const data = JSON.parse(buf.toString('utf8'));
+    return {
+        updatedAt: data.updatedAt || null,
+        note: data.note || '',
+        packs: Array.isArray(data.packs) ? data.packs : [],
+        source: manifestUrl,
+    };
+}
+
+async function installPackFromUrl(zipUrl) {
+    if (!zipUrl || !/^https?:\/\//i.test(zipUrl)) {
+        throw new Error('Ungültige ZIP-URL');
+    }
+    ensureDir(getPacksDir());
+    const tmpZip = path.join(getPacksDir(), `pack-url-${Date.now()}.zip`);
+    try {
+        const buf = await fetchUrlBuffer(zipUrl);
+        fs.writeFileSync(tmpZip, buf);
+        return installPackFromZip(tmpZip);
+    } finally {
+        try { fs.unlinkSync(tmpZip); } catch { /* ignore */ }
+    }
+}
+
 module.exports = {
     getPacksDir,
     getUserMappingsDir,
@@ -226,6 +287,8 @@ module.exports = {
     deleteUserMappingOverlay,
     mergeMapping,
     installPackFromZip,
+    installPackFromUrl,
+    fetchPacksCatalog,
     deletePack,
     slugify,
 };

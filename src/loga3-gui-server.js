@@ -31,9 +31,12 @@ const {
     installPackFromZip,
     deletePack,
     listInstalledPacks,
+    fetchPacksCatalog,
+    installPackFromUrl,
 } = require('./loga3-packs');
 const { openPath } = require('./loga3-cli-args');
 const { t, getMessages, setLocale } = require('./loga3-i18n');
+const { getAppVersion, checkForAppUpdate } = require('./loga3-updates');
 
 applySettingsToEnv(process.env);
 const PORT = Number(process.env.LOGA3_GUI_PORT) || 3847;
@@ -330,9 +333,24 @@ const server = http.createServer(async (req, res) => {
             sendJson(res, 200, {
                 running: jobRunning,
                 downloadsDir: getDownloadsDir(),
+                version: getAppVersion(),
                 messages: getMessages(),
                 ...getPublicSettings(),
             });
+            return;
+        }
+
+        if (url.pathname === '/api/updates/check' && req.method === 'GET') {
+            try {
+                const result = await checkForAppUpdate(CONVERTER_DIR);
+                sendJson(res, 200, result);
+            } catch (error) {
+                sendJson(res, 502, {
+                    currentVersion: getAppVersion(),
+                    updateAvailable: false,
+                    error: error.message || String(error),
+                });
+            }
             return;
         }
 
@@ -501,6 +519,31 @@ const server = http.createServer(async (req, res) => {
             return;
         }
 
+        if (url.pathname === '/api/packs/catalog' && req.method === 'GET') {
+            try {
+                const cfgPath = path.join(CONVERTER_DIR, 'src', 'config.json');
+                let manifestUrl = '';
+                let githubRepo = '';
+                try {
+                    const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+                    manifestUrl = cfg.packsManifestUrl || '';
+                    githubRepo = cfg.githubRepo || '';
+                } catch { /* ignore */ }
+                if (!manifestUrl && githubRepo) {
+                    // Fallback: raw main/packs/manifest.json
+                    const m = String(githubRepo).match(/github\.com[/:]([^/]+)\/([^/#]+)/i);
+                    if (m) {
+                        manifestUrl = `https://raw.githubusercontent.com/${m[1]}/${m[2].replace(/\.git$/, '')}/main/packs/manifest.json`;
+                    }
+                }
+                const catalog = await fetchPacksCatalog(manifestUrl);
+                sendJson(res, 200, { ...catalog, githubRepo });
+            } catch (error) {
+                sendJson(res, 502, { error: error.message || String(error) });
+            }
+            return;
+        }
+
         if (url.pathname === '/api/packs/install' && req.method === 'POST') {
             const buf = await readRawBody(req);
             if (!buf.length) {
@@ -522,8 +565,28 @@ const server = http.createServer(async (req, res) => {
             return;
         }
 
+        if (url.pathname === '/api/packs/install-url' && req.method === 'POST') {
+            try {
+                const body = await readBody(req);
+                if (!body.zipUrl) {
+                    sendJson(res, 400, { error: 'zipUrl fehlt' });
+                    return;
+                }
+                const installed = await installPackFromUrl(body.zipUrl);
+                pushLog(`📦 Pack von URL: ${installed.name} (${installed.id})`);
+                sendJson(res, 200, { ok: true, ...installed, hospitals: listHospitals(CONVERTER_DIR) });
+            } catch (error) {
+                sendJson(res, 400, { error: error.message || String(error) });
+            }
+            return;
+        }
+
         if (url.pathname.startsWith('/api/packs/') && req.method === 'DELETE') {
             const id = decodeURIComponent(url.pathname.slice('/api/packs/'.length));
+            if (id === 'catalog' || id === 'install' || id === 'install-url') {
+                sendJson(res, 405, { error: 'Method not allowed' });
+                return;
+            }
             try {
                 const result = deletePack(id);
                 pushLog(`🗑️ Pack entfernt: ${result.id}`);
