@@ -13,17 +13,18 @@ Versionierung: [SemVer](https://semver.org/lang/de/).
 - Preview: aktueller Monat/Woche/heute hervorgehoben, Auto-Scroll
 - Support-Anfrage: anonymisierter PDF-Rohtext (mit echten Schichtzeiten) per Mail
 - User-Mappings für fehlende Schichtzeiten speichern
-- Krankenhaus-Packs (ZIP lokal + Katalog von GitHub)
+- Arbeitgeber-Packs (ZIP lokal + Katalog von GitHub)
 - Update-Prüfung: GitHub Release anzeigen, Download nur nach Zustimmung
 - St. Elisabeth: nur freigeschaltet **Pflege · OP · Anästhesie**
 
 ### Geändert
 - Sync bleibt wipe-in-range (Dokumentation/Hinweise klarer)
 - Rich-Details optional in Event-Beschreibungen
+- UI-Begriffe: „Arbeitgeber / Einrichtung“ statt nur „Krankenhaus“
 
 ### Sicherheit / Datenschutz
 - Support-Mails ohne Roh-PDF; Namen/IDs anonymisiert; mailto-Länge begrenzt
 
-## [1.0.0] — 2026-xx-xx
+## [1.0.0] — 2026-07-19
 
 - Erste All-in-one Desktop-/GUI-Version (LOGA3-Fetch + Converter)
