@@ -87,7 +87,7 @@ export async function loadMaintainerEmail() {
  * Sendet anonymisiertes Struktur-Feedback an den Maintainer
  */
 export function sendStructureFeedback(maintainerEmail, hospital, profession, bereich, missingShiftsText, content) {
-    const infoText = `Krankenhaus: ${hospital}\nBerufsgruppe: ${profession}\nBereich: ${bereich}\n\n`;
+    const infoText = `Arbeitgeber: ${hospital}\nBerufsgruppe: ${profession}\nBereich: ${bereich}\n\n`;
     const subject = 'Dienstplan-Feedback [LOGA3]';
     const body = 'Hallo,\n\n'
         + infoText
@@ -102,7 +102,7 @@ export function sendStructureFeedback(maintainerEmail, hospital, profession, ber
  * Sendet einen Vorschlag für ein neues Schicht-Mapping an den Maintainer
  */
 export function sendMappingProposal(maintainerEmail, hospital, profession, bereich, shiftTypes) {
-    let mappingText = `Krankenhaus: ${hospital}\nBerufsgruppe: ${profession}\nBereich: ${bereich}\n\nVORGESCHLAGENE SCHICHTEN:\n`;
+    let mappingText = `Arbeitgeber: ${hospital}\nBerufsgruppe: ${profession}\nBereich: ${bereich}\n\nVORGESCHLAGENE SCHICHTEN:\n`;
 
     Object.entries(shiftTypes).forEach(([timeRange, value]) => {
         const code = typeof value === 'object' ? value.code : value;
@@ -158,7 +158,7 @@ export function buildSupportReport(opts) {
         '',
         'bitte Parser/Mapping prüfen/ergänzen:',
         '',
-        `Krankenhaus: ${hospitalName || '—'}`,
+        `Arbeitgeber / Einrichtung: ${hospitalName || '—'}`,
         `Berufsgruppe: ${groupLabel || '—'}`,
         `Bereich: ${areaLabel || '—'}`,
         preset ? `Preset: ${preset}` : null,
@@ -213,7 +213,7 @@ export async function sendSupportRequest(opts) {
     const shortBody = [
         'Hallo,',
         '',
-        `Krankenhaus: ${rest.hospitalName || '—'}`,
+        `Arbeitgeber: ${rest.hospitalName || '—'}`,
         `Berufsgruppe: ${rest.groupLabel || '—'}`,
         `Bereich: ${rest.areaLabel || '—'}`,
         rest.preset ? `Preset: ${rest.preset}` : null,

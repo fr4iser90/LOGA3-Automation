@@ -121,12 +121,12 @@
       <details class="collapsible support-request" id="supportRequestDetails">
         <summary data-i18n="supportRequestTitle">Unterstützung für meinen Bereich anfragen</summary>
         <p class="hint" data-i18n="supportRequestIntro">
-          Anderes Krankenhaus oder anderer PDF-Aufbau? Anonymisierte Struktur per E-Mail schicken — wir können Parser/Mapping ergänzen.
+          Anderer Arbeitgeber oder anderer PDF-Aufbau? Anonymisierte Struktur per E-Mail schicken — wir können Parser/Mapping ergänzen.
           Es gehen keine Roh-PDFs raus, nur bereinigter Text (Namen/IDs entfernt).
         </p>
         <div class="support-form">
           <label>
-            <span data-i18n="supportHospital">Krankenhaus / Klinik</span>
+            <span data-i18n="supportHospital">Arbeitgeber / Einrichtung</span>
             <input id="supportHospital" type="text" placeholder="z. B. St. Elisabeth Leipzig" autocomplete="organization">
           </label>
           <label>
@@ -209,7 +209,7 @@
           <p class="modal-text" data-i18n="settingsMappingIntro">Nur freigeschaltete Bereiche erscheinen hier. Andere Stationen/Berufe: „Unterstützung anfragen“.</p>
           <p id="hospitalSupportHint" class="field-hint"></p>
           <label>
-            <span data-i18n="convertHospital">Krankenhaus</span>
+            <span data-i18n="convertHospital">Arbeitgeber / Einrichtung</span>
             <select id="settingsHospital"></select>
           </label>
           <label>
@@ -235,10 +235,10 @@
         </fieldset>
 
         <fieldset class="settings-section">
-          <legend data-i18n="packsTitle">Krankenhaus-Packs</legend>
+          <legend data-i18n="packsTitle">Arbeitgeber-Packs</legend>
           <p class="modal-text" data-i18n="packsIntro">
-            St. Elisabeth (Anästhesie) ist eingebaut. Weitere Kliniken oder Mapping-Hotfixes als Pack —
-            lokal per ZIP oder aus dem GitHub-Katalog (ohne neue App-Version).
+            St. Elisabeth (Anästhesie) ist eingebaut. Weitere Arbeitgeber/Einrichtungen oder Mapping-Hotfixes als Pack —
+            lokal per ZIP oder aus dem GitHub-Katalog. LOGA3 gibt es auch außerhalb von Kliniken (Kommunen, Privatwirtschaft, …).
           </p>
           <div class="export-bar">
             <button id="packsCatalogBtn" type="button" data-i18n="packsCatalogLoad">Packs von GitHub laden</button>
