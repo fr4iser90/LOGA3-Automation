@@ -23,6 +23,8 @@ Desktop packages (Chromium included — large files):
 
 PDF-only (no LOGA3 login): [shift.fr4iser.com](https://shift.fr4iser.com).
 
+Android / iOS (separate repo, full on-device app like desktop — WebView fetch): [LOGA3-Automation-Mobile](https://github.com/fr4iser90/LOGA3-Automation-Mobile) — see [docs/MOBILE.md](docs/MOBILE.md).
+
 ## Quick start
 
 ### Desktop / local
